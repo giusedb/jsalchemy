@@ -1,0 +1,21 @@
+{
+  "name": "jsalchemy",
+  "author": "Giuseppe Di Bona",
+  "type": "module",
+  "version": "0.0.1",
+  "description": "JSAlchemy",
+  "main": "index.js",
+  "directories": {
+    "lib": "jsalchemy"
+  },
+  "files": [
+    "index.js",
+    "jsalchemy"
+  ],
+  "exports": {
+    ".": "./index.js"
+  },
+  "dependencies": {
+    "lodash": "^4.17.21"
+  }
+}
