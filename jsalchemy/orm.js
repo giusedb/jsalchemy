@@ -41,6 +41,7 @@ export class Orm {
 
     async logout() {
         const ret = await this.conn.logout();
+        this.user = null;
         return ret === 'Ok';
     }
 

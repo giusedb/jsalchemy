@@ -137,6 +137,9 @@ class JSAlchemyConnection {
             let error = 'Could not receive error from server'
             if (xhr.responseData && 'error' in xhr.responseData) {
               error = xhr.responseData.error
+              if (error) {
+                accept({ error: error, status: 'error' })
+              }
             }
             if (xhr.responseText) {
               error = xhr.responseText;
