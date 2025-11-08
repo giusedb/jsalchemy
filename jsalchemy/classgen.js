@@ -1,6 +1,4 @@
-import pkg from 'lodash';
-const { _ } = pkg;
-
+import 'lodash';
 import { Logger } from "./logger.js";
 import utils from './utils.js'
 

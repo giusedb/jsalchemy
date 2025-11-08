@@ -1,4 +1,4 @@
-import { _ } from 'lodash';
+import 'lodash';
 import { FilterCacher } from "./reducer.js"
 import makeModelClass from './classgen.js'
 import { JSAlchemyConnection} from "./connection.js";

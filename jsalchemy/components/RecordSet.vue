@@ -1,6 +1,6 @@
 <script>
 import { Orm } from "../orm.js";
-import { _ } from 'lodash';
+import 'lodash';
 import utils from '../utils.js';
 
 export default {
