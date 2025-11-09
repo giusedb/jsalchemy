@@ -72,7 +72,8 @@ export class ResourceManager {
     return result
   }
 
-  async delete(modelName, ids) {
+  async delete(modelName, pks) {
+    await this.verb(modelName, 'delete', {pks})
   }
 
   getIndex(indexName) {
@@ -112,9 +113,11 @@ export class ResourceManager {
     // fetching asynchromous model from server
     await this.describe(modelName);
     const data = await this.connection.fetch(modelName, verb, kwargs)
+    const payload = data.payload;
+    delete data.payload;
     if (!ignoreResults)
       await this.gotData(data);
-    return data;
+    return payload;
   }
 
   /**
@@ -128,17 +131,21 @@ export class ResourceManager {
    * @param sort {Array<String>} - the list of filtering attributes
    * @returns {Promise<any[]>}
    */
-  async query(modelName, filter, sort) {
+  async query(modelName, filter) {
     // ensure the model exists
     const model = await this.describe(modelName);
-    // reduce the filter for the server
-    const reducedFilter = this.filterCacher.reduce(modelName, filter)
-    if (reducedFilter !== null) {
-      await this.verb(modelName, 'get', {filter: reducedFilter})
+    return new RecordSet(this, model, filter);
+  }
+
+  async get(modelName, pks) {
+    const model = await this.describe(modelName);
+    let filter = {}
+    filter[model.$pk] = pks;
+    filter = this.filterCacher.reduce(modelName, filter);
+    if (filter) {
+      await this.verb(modelName, 'get', {pks: filter[model.$pk]});
     }
-    // collect data from the Internal DB
-    return this.collections[modelName].find(filter)
-    // return this.IDB[modelName].values().filter(resourceFilter).sort(utils.sortFunction(sort)).toArray()
+    return this.collections[modelName].find({$pk: pks})
   }
 
   async gotData(data) {

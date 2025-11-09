@@ -256,7 +256,9 @@ export default function makeModelClass(orm, resMan, model) {
     get() {
       return resMan.getCollection(model.name);
     }
-  })
+  });
+
+  Klass.rpp = model.rpp;
 
   // Add references
   Object.assign(Klass, {
