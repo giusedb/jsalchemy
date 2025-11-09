@@ -1,5 +1,6 @@
 import { ResourceManager } from "./resources.js";
 import { NamedEventManager } from "./events.js";
+import RecordSet from "./RecordSet.js";
 
 /**
  * ORM options
@@ -73,6 +74,13 @@ export class Orm {
      */
     query(modelName, filter, sort='id') {
         return this.resources.query(modelName, filter, sort);
+    }
+
+    async delete(...objects) {
+      const byClass = _(objects).groupBy('constructor.name');
+      for (let [model, objs] of _(byClass).entries()) {
+        await this.resources.delete(model, objs.map(obj => obj.$pk));
+      }
     }
 }
 
