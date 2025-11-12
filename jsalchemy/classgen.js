@@ -330,9 +330,7 @@ export default function makeModelClass(orm, resMan, model) {
     return this;
   }
   Klass.prototype.$delete = async function() {
-    const res = await orm.resources.verb(model.name, 'delete', {pks: [this[model.$pk[0]]]});
-    console.log(`deleting ${model.name} ${res}`);
-    return res;
+    return await orm.resources.verb(model.name, 'delete', {pks: [this[model.$pk[0]]]});
   }
 
   if (model.format_string) {

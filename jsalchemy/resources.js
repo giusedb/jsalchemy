@@ -133,8 +133,8 @@ export class ResourceManager {
    */
   async query(modelName, filter) {
     // ensure the model exists
-    const model = await this.describe(modelName);
-    return new RecordSet(this, model, filter);
+    // const model = await this.describe(modelName);
+    return new RecordSet(this, modelName, filter);
   }
 
   async get(modelName, pks) {
@@ -162,6 +162,7 @@ export class ResourceManager {
         _(data.delete).entries().each(([resourceName, rawData]) => {
           const deleted = this.getCollection(resourceName).delete(...rawData);
           this.emit('deleted-' + resourceName,  deleted);
+          this.emit('deleted-' + resourceName + '-pk', new Set(rawData))
         });
     }
     if (data.new) {
