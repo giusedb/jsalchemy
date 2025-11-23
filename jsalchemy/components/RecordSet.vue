@@ -33,13 +33,6 @@ const total = computed(() => {
 });
 
 onMounted(() => {
-  orm.value.on('received-' + props.resource, () => {
-    state.touchRecord++;
-  });
-  orm.value.on('deleted-' + props.resource, () => {
-    state.touchRecord++;
-  });
-
   local.recordSet = new RecordSet(orm.value.resources, props.resource, props.filter, props.name, {
     page: 1,
     rpp: props.recordsPerPage,
@@ -59,6 +52,11 @@ onMounted(() => {
   local.recordSet.on('loading', (value) => {
     state.loading = value
   });
+  local.recordSet.on('paging', (paging) => {
+    if (state.page !== paging.page) {
+      state.page = paging.page;
+    }
+  })
 });
 
 watch(() => props.page, (newVal, oldVal) => {
