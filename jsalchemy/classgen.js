@@ -318,10 +318,6 @@ export default function makeModelClass(orm, resMan, model) {
     model.$pk.forEach(k => modified[k] = this[k]);
     const res = await orm.resources.verb(model.name,
       this.$pk ? 'put' : 'post', modified);
-    if (res.$validation) {
-      res.$validation = res.$validation;
-      return this;
-    }
     // this.$init(res[model.name][0]);
     const collection = resMan.getCollection(model.name);
     collection.update(this);
