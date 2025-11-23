@@ -82,7 +82,7 @@ export default class RecordSet {
   }
 
   onInsert(items) {
-    console.info(`Insert ${items.length} records from`)
+    console.info(`Insert ${items.length} records into ${this.resource.name}`);
   }
 
   getPagerKey() {
