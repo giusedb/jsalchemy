@@ -71,7 +71,7 @@ export default class RecordSet {
               }
             }
         });
-        this.totalCount += deleted;
+        this.totalCount -= deleted;
       })
 
     const diff = new Set(_(this.records).map('$pk')).intersection(pks);
@@ -187,6 +187,7 @@ for (let prop of Object.keys(defaultPaging)) {
       if (prop !== 'page') {
         this.paging.page = 1;
       }
+      this.events.emit('paging', this.paging);
       this.load();
     }
   });
