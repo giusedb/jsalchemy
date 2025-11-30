@@ -84,9 +84,10 @@ export class Orm {
         return;
       }
       const byClass = _(objects).groupBy('constructor.name');
-      for (let [model, objs] of _(byClass).entries()) {
-        _.chunk(obj, model.rpp).forEach(async (chunk) => {
-          await this.resources.delete(model, objs.map(obj => obj.$pk));
+      for (let [resourceName, objs] of _(byClass).entries()) {
+        let resource = await this.getModel(resourceName);
+        _.chunk(objs, resource.rpp).forEach(async (chunk) => {
+          await this.resources.delete(resourceName, objs.map(obj => obj.$pk));
         });
       }
     }

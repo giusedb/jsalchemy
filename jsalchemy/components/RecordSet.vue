@@ -33,11 +33,11 @@ const total = computed(() => {
 });
 
 onMounted(() => {
-  local.recordSet = new RecordSet(orm.value.resources, props.resource, props.filter, props.name, {
+  local.recordSet = new RecordSet(orm.value.resources, props.resource, props.filter, {
     page: 1,
     rpp: props.recordsPerPage,
     sort: props.sort,
-  });
+  }, props.name);
   local.recordSet.on('results', (recs, totalCount) => {
     if (recs.length === state.records.length) {
       for (let i = 0; i < recs.length; i ++) {

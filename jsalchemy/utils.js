@@ -315,19 +315,22 @@ export default {
 
     },
     sortFunction(sort) {
-        if (!Array.isArray(sort)) {
-            sort = [sort];
+        if (sort.constructor === String) {
+          sort = sort.split(',')
         }
         const content = sort.map(item => {
-            if (/ /.test(item)) {
-                item = item.split(/\s+/)
-            } else {
-                item = [item, 'asc']
-            }
+          item = item.trim();
+          if (item.startsWith('~')) {
             return {
-                field: item[0],
-                order: item[1],
+              field: item.substring(1),
+              order: 'desc',
             }
+          } else {
+            return {
+              field: item,
+              order: 'asc'
+            }
+          }
         }).map(item => {
             let ret = ' 1: -1';
             if (item.order === 'asc') {
@@ -383,5 +386,9 @@ export default {
         return obj;
       }
       return result;
+    },
+    indexBy(array, field) {
+      const ret = {};
+      return Object.fromEntries(_(array).map(x => [x[field], x]).value())
     }
 };
