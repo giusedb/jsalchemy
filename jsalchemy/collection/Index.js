@@ -38,7 +38,8 @@ export default class Index {
   }
 
   unlink(item) {
-    delete this.idx[this.getKey(item)];
+    if (item)
+      delete this.idx[this.getKey(item)];
   }
 
   update(item) {
