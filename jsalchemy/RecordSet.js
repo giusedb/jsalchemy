@@ -9,6 +9,8 @@ const defaultPaging = {
 
 const records = {};  // singletone by resource name
 const totalCounts = {};
+const idPages = {};
+const incompletePages = {};
 
 class Pending {
   constructor(item) {
@@ -19,7 +21,6 @@ class Pending {
     this.maxPage = null;
   }
 }
-
 
 function findMin(item, sortFunc, pages, pkIndex, start) {
   let partial = start || [0, 0];
@@ -52,21 +53,19 @@ function findMax(item, sortFunc, pages, pkIndex, start) {
   }
 }
 
-
 class Sorted {
-  constructor(recordSet, filter, sort) {
+  constructor(recordSet, filter, sort, pagerKey) {
     const pk = recordSet.resource.$pk[0];
+    this.pagerKey = pagerKey
     if (!sort.includes(pk) && !sort.includes(`~${pk}`)) {
       sort.push(pk);
     }
-    this.idPages = {};
     this.recSet = recordSet;
     this.filter = filter;
     this.filterFunc = utils.makeFilter(filter);
     this.sort = sort;
     this.pendings = {};
     this.sortFunc = utils.sortFunction(sort);
-    this.incompletePages = new Set();
   }
   async setPage(page) {
     this.page = page;
@@ -83,13 +82,14 @@ class Sorted {
     }).size();
   }
   async getIdPages(from, to) {
+    const idPages = this.idPages;
     const iTo = to - 1;
     const fromPage = Math.floor(from / this.recSet.resource.rpp);
     const toPage = Math.floor(iTo / this.recSet.resource.rpp);
     for (let page of [fromPage, toPage]) {
-      if (!(page in this.idPages) || (
-        ((this.idPages[page].length < ((iTo % this.recSet.resource.rpp) + 1)) ||
-          (this.idPages[page].length >= this.recSet.resource.rpp)) &&
+      if (!(page in idPages) || (
+        ((idPages[page].length < ((iTo % this.recSet.resource.rpp) + 1)) ||
+          (idPages[page].length >= this.recSet.resource.rpp)) &&
         (this.incompletePages.has(page)))) {
         const result = await this.recSet.resMan.verb(
           this.recSet.resource.name, 'query', {
@@ -99,42 +99,43 @@ class Sorted {
               page: page + 1,
               sort: this.sort
             }});
-        this.idPages[page] = result.pks;
+        idPages[page] = result.pks;
         this.incompletePages.delete(page);
         this.recSet.totalCount = result.totalCount;
         // remove extra id records
-        if ((page - 1 in this.idPages) &&
-          (this.idPages[page - 1].length > this.recSet.resource.rpp)) {
-          const overRange = this.idPages[page - 1][this.recSet.resource.rpp + 1];
-          const firstItem = this.idPages[page][0];
+        if ((page - 1 in idPages) &&
+          (idPages[page - 1].length > this.recSet.resource.rpp)) {
+          const overRange = idPages[page - 1][this.recSet.resource.rpp + 1];
+          const firstItem = idPages[page][0];
           if (overRange !== firstItem) {
             this.recSet.resMan.emit('error', 'Inconsistency detected',
               `last item of the previous page has PK ${overRange}, first item of the current page has PK ${firstItem}`);
           }
-          this.idPages[page - 1].splice(this.recSet.resource.rpp);
+          idPages[page - 1].splice(this.recSet.resource.rpp);
           this.incompletePages.add(page - 1);
         }
       }
     }
     const pks = [];
     if (fromPage === toPage) {
-      pks.push(...this.idPages[fromPage].slice(
+      pks.push(...idPages[fromPage].slice(
         from % this.recSet.resource.rpp,
         (iTo % this.recSet.resource.rpp) + 1));
     } else {
-      pks.push(...this.idPages[fromPage].slice(from % this.recSet.resource.rpp));
-      pks.push(...this.idPages[toPage].slice(0, to % this.recSet.resource.rpp));
+      pks.push(...idPages[fromPage].slice(from % this.recSet.resource.rpp));
+      pks.push(...idPages[toPage].slice(0, to % this.recSet.resource.rpp));
     }
     return pks
   }
   async getResource(pks) {
+    const idPages = this.idPages;
     try {
       let recs = await this.recSet.resMan.get(this.recSet.resource.name, pks);
       const idx = utils.indexBy(recs, '$pk');
       const totalPages = Math.ceil(this.recSet.totalCount / this.recSet.resource.rpp);
-      if ((_(this.idPages).size() === totalPages)) {
+      if ((_(idPages).size() === totalPages)) {
         const pkIndex = this.recSet.resMan.collections[this.recSet.resource.name].pkIndex.idx;
-        if (_(this.idPages).values().flatten().every(x => x in pkIndex)) {
+        if (_(idPages).values().flatten().every(x => x in pkIndex)) {
           this.recSet.completelyLoaded = true;
         }
       }
@@ -145,38 +146,6 @@ class Sorted {
     }
   }
   onDelete(pks) {
-    let deleted = 0;
-    let remove = false;
-    _(this.idPages).entries()
-      .sortBy(x => parseInt(x[0]))
-      .forEach(([page, ids]) => {
-        const p = parseInt(page)
-        if (remove) {
-          delete this.idPages[page];
-          return
-        }
-        for (let i = 0; i < ids.length; i++) {
-          if (pks.has(ids[i])) {
-            deleted++;
-            ids.splice(i, 1);
-            i--;
-          }
-        }
-        if (deleted) {
-          if ((p + 1) in this.idPages) {
-            this.idPages[page].push(...this.idPages[p + 1].splice(0, deleted));
-            if (this.idPages[p + 1].length === 0) {
-              delete this.idPages[p + 1];
-            }
-          } else {
-            remove = true;
-          }
-        }
-        if (ids.length < this.recSet.resource.rpp) {
-          this.incompletePages.add(p);
-        }
-    });
-    this.recSet.events.emit('refresh');
   }
   onInsert(items) {
     items = items.filter(this.filterFunc);
@@ -194,15 +163,16 @@ class Sorted {
   }
   placePendings() {
     // TODO figure out where to put the pending items
-    const allIds = new Set(_(this.idPages).values().flatten().value());
+    const idPages = this.idPages;
+    const allIds = new Set(_(idPages).values().flatten().value());
     allIds.intersection(new Set(_(this.pendings).keys().map(parseInt))).forEach(pk => {
       delete this.pendings[pk];
     });
     const pkIndex = this.recSet.resMan.collections[this.recSet.resource.name].pkIndex.idx;
     let needRefresh = false;
     for (let pending of _(this.pendings).values()) {
-      let min = findMin(pending.item, this.sortFunc, this.idPages, pkIndex);
-      let max = findMax(pending.item, this.sortFunc, this.idPages, pkIndex, min);
+      let min = findMin(pending.item, this.sortFunc, idPages, pkIndex);
+      let max = findMax(pending.item, this.sortFunc, idPages, pkIndex, min);
       pending.minPage = min[0];
       pending.min = min[1];
       if (max) {
@@ -220,12 +190,13 @@ class Sorted {
     this.setPage(this.page);
   }
   idPageInsert(pending) {
+    const idPages = this.idPages;
     let pageIdx = pending.minPage
-    let page = this.idPages[pageIdx];
+    let page = idPages[pageIdx];
     page.splice(pending.min + 1, 0, pending.item.$pk);
     while (page.length > this.recSet.resource.rpp) {
       pageIdx++;
-      let nextPage = this.idPages[pageIdx];
+      let nextPage = idPages[pageIdx];
       if (nextPage) {
         nextPage.unshift(page.pop());
         page = nextPage;
@@ -233,9 +204,9 @@ class Sorted {
         break;
       }
     }
-    // _(this.idPages).keys()
+    // _(idPages).keys()
     //   .filter(x => parseInt(x) > pageIdx).forEach(x => {
-    //   delete this.idPages[x];
+    //   delete idPages[x];
     // })
   }
 }
@@ -249,7 +220,34 @@ Object.defineProperty(Sorted.prototype, 'leftPending', {
       )
     )
   }
-})
+});
+
+Object.defineProperty(Sorted.prototype, 'idPages', {
+  get() {
+    let resourcePages = idPages[this.recSet.resource.name];
+    if (!resourcePages) {
+      idPages[this.recSet.resource.name] = resourcePages = {};
+    }
+    let page = resourcePages[this.pagerKey];
+    if (!page) {
+      resourcePages[this.pagerKey] = page = {};
+    }
+    return page;
+  }
+});
+Object.defineProperty(Sorted.prototype, 'incompletePages', {
+  get() {
+    let resourcePages = incompletePages[this.recSet.resource.name];
+    if (!resourcePages) {
+      incompletePages[this.recSet.resource.name] = resourcePages = {};
+    }
+    let page = resourcePages[this.pagerKey];
+    if (!page) {
+      resourcePages[this.pagerKey] = page = new Set();
+    }
+    return page;
+  }
+});
 
 export default class RecordSet {
   constructor(resourceManager, resourceName, filter, paging, name, loadCallBack) {
@@ -260,10 +258,7 @@ export default class RecordSet {
     this.resMan = resourceManager;
     this.filter = filter || {};
     this.paging = Object.assign(Object.assign({}, defaultPaging), paging);
-    if (!(resourceName in records)) {
-      records[resourceName] = {};
-    }
-    this.sortedPks = records[resourceName]; // bySortArray
+    this.sortedPks = {};
     this.totalCount = 0;
     this.records = []; // visible records on viewport
     this.callBack = loadCallBack;
@@ -274,13 +269,64 @@ export default class RecordSet {
         this.resource = resource;
         this.load();
       });
-    resourceManager.on('deleted-' + resourceName + '-pk', this.onDelete.bind(this))
-    resourceManager.on('new-' + resourceName, this.onInsert.bind(this))
+    this.eventHandlers = [
+      resourceManager.on('deleted-' + resourceName + '-pk', this.onDelete.bind(this)),
+      resourceManager.on('new-' + resourceName, this.onInsert.bind(this))];
+  }
+  destroy() {
+    console.info(`Destroying the RecordSet`)
+    this.eventHandlers.forEach(x => this.resMan.events.unbind.call(this.resMan.events, x));
   }
   onDelete(pks) {
-    _(this.sortedPks).values().forEach(x => x.onDelete(pks));
-    this.totalCount -= pks.length;
+    _(idPages[this.resource.name]).entries().forEach(([key, idPages]) => {
+      let deleted = 0;
+      let remove = false;
+      _(idPages).entries()
+        .sortBy(x => parseInt(x[0]))
+        .forEach(([page, ids]) => {
+          const p = parseInt(page)
+          if (remove) {
+            delete idPages[page];
+            return
+          }
+          for (let i = 0; i < ids.length; i++) {
+            if (pks.has(ids[i])) {
+              deleted++;
+              ids.splice(i, 1);
+              i--;
+            }
+          }
+          if (deleted) {
+            if ((p + 1) in idPages) {
+              idPages[page].push(...idPages[p + 1].splice(0, deleted));
+              if (idPages[p + 1].length === 0) {
+                delete idPages[p + 1];
+              }
+            } else {
+              remove = true;
+            }
+          }
+          if (ids.length < this.resource.rpp) {
+            this.incompletePages(this.resource.name, key).add(p);
+          }
+        });
+    });
+
+    // _(this.sortedPks).values().forEach(x => x.onDelete(pks));
+    this.totalCount -= pks.size;
     this.load();
+    this.events.emit('refresh');
+  }
+  incompletePages(resourceName, key) {
+    let pages = incompletePages[resourceName];
+    if (!pages) {
+      incompletePages[resourceName] = pages = {};
+    }
+    let page = pages[key];
+    if (!page) {
+      pages[key] = page = new Set();
+    }
+    return page;
   }
   onInsert(items) {
     console.info(`Insert ${items.length} records into ${this.resource.name}`);
@@ -293,13 +339,12 @@ export default class RecordSet {
     const sort = this.paging.sort.join(':');
     return `${filter.join(':')}|${sort}`;
   }
-
   async load() {
     this.events.emit('loading', true);
     try {
       const key = this.getPagerKey();
       if (!(key in this.sortedPks)) {
-        this.sortedPks[key] = new Sorted(this, Object.assign({}, this.filter), [...this.paging.sort]);
+        this.sortedPks[key] = new Sorted(this, Object.assign({}, this.filter), [...this.paging.sort], key);
       }
       this.activeSort = this.sortedPks[key];
       const recs = await this.sortedPks[key].setPage(this.paging.page);
