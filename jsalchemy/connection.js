@@ -46,7 +46,12 @@ class JSAlchemyConnection {
       evt.target.send('TOKEN:' + this.status.token)
     }, this);
 
-    this.on('ws-data', this.resMan.gotData, this.resMan)
+    this.on('ws-data', (data) => this.resMan.gotData(JSON.parse(data)), this.resMan);
+    this.on('ws-close', evt => {
+      setTimeout(() => {
+        this.wsConnection = new JSAlchemyWsConnection(this, this.status.wsConnection);
+      }, Math.floor(Math.random() * 5000))
+    });
   }
 
   autoLogin(ttl) {

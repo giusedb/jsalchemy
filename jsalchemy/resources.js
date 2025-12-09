@@ -160,8 +160,11 @@ export class ResourceManager {
     }
     if (data.delete) {
         _(data.delete).entries().each(([resourceName, rawData]) => {
-          const deleted = this.getCollection(resourceName).delete(...rawData);
-          this.emit('deleted-' + resourceName,  deleted);
+          const idx = this.getCollection(resourceName).pkIndex.idx;
+          const deleted = this.getCollection(resourceName).delete(...rawData.filter(x => x in idx));
+          if (deleted.length) {
+            this.emit('deleted-' + resourceName, deleted);
+          }
           this.emit('deleted-' + resourceName + '-pk', new Set(rawData))
         });
     }
