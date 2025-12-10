@@ -134,7 +134,7 @@ export class ResourceManager {
   async query(modelName, filter) {
     // ensure the model exists
     // const model = await this.describe(modelName);
-    return new RecordSet(this, modelName, filter);
+    return new RSet(this, modelName, filter);
   }
 
   async get(modelName, pks) {

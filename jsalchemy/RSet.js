@@ -7,7 +7,7 @@ const defaultPaging = {
   sort: ['id'],
 };
 
-const records = {};  // singletone by resource name
+const records = {};  // singleton by resource name
 const totalCounts = {};
 const idPages = {};
 const incompletePages = {};
@@ -145,8 +145,6 @@ class Sorted {
       console.error(e)
     }
   }
-  onDelete(pks) {
-  }
   onInsert(items) {
     items = items.filter(this.filterFunc);
     const itemIdx = utils.indexBy(items, '$pk');
@@ -169,7 +167,6 @@ class Sorted {
       delete this.pendings[pk];
     });
     const pkIndex = this.recSet.resMan.collections[this.recSet.resource.name].pkIndex.idx;
-    let needRefresh = false;
     for (let pending of _(this.pendings).values()) {
       let min = findMin(pending.item, this.sortFunc, idPages, pkIndex);
       let max = findMax(pending.item, this.sortFunc, idPages, pkIndex, min);
@@ -249,7 +246,7 @@ Object.defineProperty(Sorted.prototype, 'incompletePages', {
   }
 });
 
-export default class RecordSet {
+export default class RSet {
   constructor(resourceManager, resourceName, filter, paging, name, loadCallBack) {
     this.events = new NamedEventManager()
     this.on = this.events.on.bind(this.events)
@@ -259,7 +256,6 @@ export default class RecordSet {
     this.filter = filter || {};
     this.paging = Object.assign(Object.assign({}, defaultPaging), paging);
     this.sortedPks = {};
-    this.totalCount = 0;
     this.records = []; // visible records on viewport
     this.callBack = loadCallBack;
     this.activeSort = null;
@@ -334,10 +330,12 @@ export default class RecordSet {
     // this.totalCount += items.length;
     this.load();
   }
+  getFilterKey() {
+    return Object.keys(this.filter).sort().map(k => `${k}:${this.filter[k]}`).join(':');
+  }
   getPagerKey() {
-    const filter = Object.keys(this.filter).sort().map(k => `${k}:${this.filter[k]}`)
     const sort = this.paging.sort.join(':');
-    return `${filter.join(':')}|${sort}`;
+    return `${this.getFilterKey()}|${sort}`;
   }
   async load() {
     this.events.emit('loading', true);
@@ -365,7 +363,7 @@ export default class RecordSet {
 }
 
 for (let prop of Object.keys(defaultPaging)) {
-  Object.defineProperty(RecordSet.prototype, prop, {
+  Object.defineProperty(RSet.prototype, prop, {
     get() {
       return this.paging[prop];
     },
@@ -381,5 +379,25 @@ for (let prop of Object.keys(defaultPaging)) {
   });
 }
 
-global.RecordSet = RecordSet;
-
+Object.defineProperty(RSet.prototype, 'totalCount', {
+  get() {
+    const filterKey = this.getFilterKey();
+    let resourceCount = totalCounts[this.resource.name];
+    if (!resourceCount) {
+      totalCounts[this.resource.name] = resourceCount = {}
+    }
+    let filterCount = resourceCount[filterKey];
+    if (!filterCount) {
+      resourceCount[filterKey] = filterCount = 0;
+    }
+    return filterCount;
+  },
+  set(value) {
+    const filterKey = this.getFilterKey();
+    let resourceCount = totalCounts[this.resource.name];
+    if (!resourceCount) {
+      totalCounts[this.resource.name] = resourceCount = {}
+    }
+    let filterCount = resourceCount[filterKey] = value
+  }
+});

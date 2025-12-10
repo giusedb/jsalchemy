@@ -1,7 +1,7 @@
 <script setup>
 import { Orm } from "../orm.js";
+import RSet from '../RSet.js';
 import 'lodash';
-import utils from '../utils.js';
 
 const emits = defineEmits(['loading', 'records', 'recordSet']);
 const props = defineProps({
@@ -29,7 +29,7 @@ const total = computed(() => {
 });
 
 onMounted(() => {
-  local.recordSet = new RecordSet(orm.value.resources, props.resource, props.filter, {
+  local.recordSet = new RSet(orm.value.resources, props.resource, props.filter, {
     page: 1,
     rpp: props.recordsPerPage,
     sort: props.sort,
@@ -57,7 +57,8 @@ onMounted(() => {
   emits('recordSet', local.recordSet);
 });
 onUnmounted(() => {
-  local.recordSet.destroy();
+  if (local.recordSet)
+    local.recordSet.destroy();
 })
 
 watch(() => props.page, (newVal, oldVal) => {

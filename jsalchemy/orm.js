@@ -1,6 +1,6 @@
 import { ResourceManager } from "./resources.js";
 import { NamedEventManager } from "./events.js";
-import RecordSet from "./RecordSet.js";
+import RSet from "./RSet.js";
 
 /**
  * ORM options
