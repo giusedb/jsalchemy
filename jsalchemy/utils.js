@@ -1,4 +1,4 @@
-import 'lodash';
+import _ from 'lodash';
 
 const mocks = {};
 
@@ -82,7 +82,7 @@ export default {
                 data = {};
             }
 
-            if(XMLHttpRequest) {
+            if (XMLHttpRequest) {
                 req = new XMLHttpRequest();
                 req.onreadystatechange = () => {
                     if (req.readyState === 4) {
@@ -114,8 +114,8 @@ export default {
                 reject(new Error('CORS not supported'));
             }
 
-            req.open('POST', url, true);
             req.onerror = reject;
+            req.open('POST', url, true);
             req.setRequestHeader('Accept','application/json');
             if (token) { data.__token__ = token }
             if (!formEncode){

@@ -1,5 +1,6 @@
 import {NamedEventManager} from "./events.js";
 import utils from './utils.js';
+import _ from 'lodash';
 
 const defaultPaging = {
   rpp: 10,

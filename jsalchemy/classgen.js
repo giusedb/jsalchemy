@@ -1,4 +1,4 @@
-import 'lodash';
+import _ from 'lodash';
 import { Logger } from "./logger.js";
 import utils from './utils.js'
 

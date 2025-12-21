@@ -6,7 +6,9 @@ import Collection from "./collection/Collection.js";
 import Toucher from "./toucher.js";
 import { Logger } from "./logger.js";
 import { autoLinker } from "./autolinker.js";
+import RSet from "./RSet.js";
 import storage from "./storage.js";
+import _ from 'lodash'
 
 export class PermissionTable {
 

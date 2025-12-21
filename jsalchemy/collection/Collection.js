@@ -1,4 +1,4 @@
-import 'lodash'
+import _ from 'lodash'
 import Index from "./Index.js";
 import MultiIndex from "./MultiIndex.js";
 import utils from "../utils.js";

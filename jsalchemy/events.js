@@ -1,4 +1,4 @@
-import 'lodash'
+import _ from 'lodash'
 
 export class NamedEventManager {
 
