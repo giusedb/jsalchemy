@@ -111,14 +111,19 @@ export class ResourceManager {
 
   }
 
-  async verb(modelName, verb, kwargs, ignoreResults) {
+  async verb(modelName, verb, kwargs, ignoreResults, fullResult) {
     // fetching asynchromous model from server
     await this.describe(modelName);
     const data = await this.connection.fetch(modelName, verb, kwargs)
     const payload = data.payload;
-    delete data.payload;
     if (!ignoreResults)
       await this.gotData(data);
+    if (fullResult) {
+      if (payload) {
+        data.payload = payload;
+      }
+      return data;
+    }
     return payload;
   }
 
@@ -141,13 +146,18 @@ export class ResourceManager {
 
   async get(modelName, pks) {
     const model = await this.describe(modelName);
+    const returnOne = pks?.constructor !== Array;
     let filter = {}
     filter[model.$pk] = pks;
     filter = this.filterCacher.reduce(modelName, filter);
     if (filter) {
       await this.verb(modelName, 'get', {pks: filter[model.$pk]});
     }
-    return this.collections[modelName].find({$pk: pks})
+    const ret = this.collections[modelName].find({$pk: pks});
+    if (returnOne) {
+        return ret[0];
+    }
+    return ret;
   }
 
   async gotData(data) {
