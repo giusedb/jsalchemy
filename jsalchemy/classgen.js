@@ -215,17 +215,20 @@ export default function makeModelClass(orm, resMan, model) {
   if (model.verbs) {
     model.verbs.forEach(verb => {
       const defaults = Object.assign({}, verb.defaults);
-      Klass.prototype[_.camelCase(verb.name)] = async function(...args) {
+      const target = verb.isInstance ? Klass.prototype : Klass;
+      target[_.camelCase(verb.name)] = async function(...args) {
         const kwargs = Object.fromEntries(
           _.zip(verb.args, args)
             .map(([k, v]) => [k, v === undefined ? defaults[k] : v]));
-        kwargs['pk'] = this.$pk;
-        const ret = await resMan.verb(model.name, verb.name, kwargs, verb.detatchReturn);
+        if (verb.isInstance) {
+            kwargs['pk'] = this.$pk;
+        }
+        let ret = await resMan.verb(model.name, verb.name, kwargs, verb.detachReturn);
         const toResolve = {};
-        if (ret.payload?.$ref) {
+        if (ret?.$ref) {
           return  await resMan.get(...ret.payload.$ref);
         }
-        utils.deepMap(ret.payload, (x) => {
+        utils.deepMap(ret, (x) => {
           if ((typeof x === 'object') && (x.constructor === Object) && ('$ref' in x)) {
             if (!(x.$ref[0] in toResolve)) {
               toResolve[x.$ref[0]] = new Set();
@@ -242,13 +245,13 @@ export default function makeModelClass(orm, resMan, model) {
           }
           resolved[resource] = Object.fromEntries(res.map(x => [x.$pk, x]));
         }
-        ret.payload = utils.deepMap(ret.payload, (x) => {
+        ret = utils.deepMap(ret, (x) => {
           if (x && (typeof x === 'object') && (x.constructor === Object) && ('$ref' in x)) {
             return resolved[x.$ref[0]][x.$ref[1]];
           }
           return x;
         });
-        return ret.payload;
+        return ret;
       }
     });
   }
@@ -316,14 +319,21 @@ export default function makeModelClass(orm, resMan, model) {
       _(diff).entries()
         .map(([k, v]) => [k, v[1]]));
     model.$pk.forEach(k => modified[k] = this[k]);
+    const isNew = ! this.$pk
     const res = await orm.resources.verb(model.name,
-      this.$pk ? 'put' : 'post', modified);
-    // this.$init(res[model.name][0]);
+      isNew ? 'post' : 'put', modified, true, true);
+    if (res.new && res.new[model.name] && res.new[model.name].length) {
+      this.$init(res.new[model.name][0]);
+    }
     const collection = resMan.getCollection(model.name);
-    collection.update(this);
+    if (isNew) {
+        collection.add(this);
+    } else {
+        collection.update(this);
+    }
     const ret = collection.get(this.$pk);
     resMan.emit('got-data', ret);
-    return this;
+    return ret;
   }
   Klass.prototype.$delete = async function() {
     return await orm.resources.verb(model.name, 'delete', {pks: [this[model.$pk[0]]]});
