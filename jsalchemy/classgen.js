@@ -86,9 +86,8 @@ export default function makeModelClass(orm, resMan, model) {
   let getPk = null;
   if (model.$pk.length === 1) {
     const pk = model.$pk[0];
-    getPk = function() {
-      return this[pk];
-    }
+    getPk = new Function('', `return this.${pk} ? String(this.${pk}) : null`);
+
   } else {
     const code = _(model.$pk).map(x => `this.${x}`).join(',').value()
     getPk = new Function(`return [${code}].join("-");`);
@@ -262,6 +261,12 @@ export default function makeModelClass(orm, resMan, model) {
   });
 
   Klass.rpp = model.rpp;
+  if (model.$pk.length === 1)
+    Klass.getPk = new Function('obj', `return obj.${model.$pk[0]} ? String(obj.${model.$pk[0]}) : null`);
+  else {
+      let exp = model.$pk.map(x => `obj.${x} || ''`).join(" + '-' + ")
+      Klass.getPk = new Function('obj', `return '' + ${exp};`);
+  }
 
   // Add references
   Object.assign(Klass, {

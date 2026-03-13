@@ -72,8 +72,10 @@ export class Orm {
      * @param sort {Array<Array<String>>}
      * @returns {Promise<Array<any>>}
      */
-    query(modelName, filter, sort='id') {
-        return this.resources.query(modelName, filter, sort);
+    async query(resourceName, filter, sort='id') {
+        // get model default rpp
+        const res = await this.resources.describe(resourceName);
+        return new RSet(this.resources, resourceName, filter, {page: 1, sort, rpp: res.rpp});
     }
 
     async delete(...objects) {

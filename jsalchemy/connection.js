@@ -49,8 +49,9 @@ class JSAlchemyConnection {
     this.on('ws-data', (data) => this.resMan.gotData(JSON.parse(data)), this.resMan);
     this.on('ws-close', evt => {
       setTimeout(() => {
+        if (this.isConnected) return;
         this.wsConnection = new JSAlchemyWsConnection(this, this.status.wsConnection);
-      }, Math.floor(Math.random() * 5000))
+      }, 1000 + Math.floor(Math.random() * 4000))
     });
   }
 

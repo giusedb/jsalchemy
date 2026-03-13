@@ -235,12 +235,12 @@ export class ResourceManager {
   gotModel(definition) {
     const modelName = definition.name;
     // localStorage['description:' + modelName] = JSON.stringify(definition);
-    this.modelCache[modelName] = makeModelClass(this.orm, this, definition);
+    this.classCache[modelName] = makeModelClass(this.orm, this, definition);
     if (!(modelName in this.collections)) {
-      this.collections[modelName] = new Collection(this.touch, this.modelCache[modelName])
+      this.collections[modelName] = new Collection(this.touch, this.classCache[modelName])
     }
-    this.emit('got-model', this.modelCache[modelName]);
-    this.emit('got-model-' + _.kebabCase(modelName), this.modelCache[modelName]);
+    this.emit('got-model', this.classCache[modelName]);
+    this.emit('got-model-' + _.kebabCase(modelName), this.classCache[modelName]);
   }
 
   gotPermissions(data) {
@@ -254,7 +254,7 @@ export class ResourceManager {
       return this.descriptionWaiting[modelName];
     }
     const call = async () => {
-      if (!(modelName in this.modelCache)) {
+      if (!(modelName in this.classCache)) {
         if (this.failedModels.has(modelName)) {
           throw new Error(`model ${modelName} not found`);
         }
@@ -270,9 +270,9 @@ export class ResourceManager {
             return null;
           }
         }
-        return this.modelCache[modelName];
+        return this.classCache[modelName];
       }
-      return this.modelCache[modelName];
+      return this.classCache[modelName];
     }
     return this.descriptionWaiting[modelName] = call();
   }
