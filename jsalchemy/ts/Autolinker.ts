@@ -18,13 +18,19 @@ export class Autolinker {
                 this.resMan.verb(name, 'get', {pks: missing});
             }
             let queries = coll.missingQueries
-            if (queries.length)
-                this.resMan.verb(name, 'query', { multiple: queries.map(([nPage, pager]) => pager.filterFor(nPage))}, true)
+            if (queries.length === 1) {
+                this.resMan.verb(name, 'query', queries[0][1].filterFor(queries[0][0]), true)
                     .then((result: string[][]) => {
-                       for (let i = 0; i < queries.length; i ++) {
-                           queries[i][1].pushPage(queries[i][0], result[i])
-                       }
-                });
+                        queries[0][1].pushPage(queries[0][0], result)
+                    });
+            } else if (queries.length > 1) {
+                this.resMan.verb(name, 'query', {multiple: queries.map(([nPage, pager]) => pager.filterFor(nPage))}, true)
+                    .then((result: string[][]) => {
+                        for (let i = 0; i < queries.length; i++) {
+                            queries[i][1].pushPage(queries[i][0], result[i])
+                        }
+                    });
+            }
         }
     }
 

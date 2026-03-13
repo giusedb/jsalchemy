@@ -51,7 +51,7 @@ class Collection {
         this.filterFuncs.forEach((func, fk, map) => {
             if (func(item)) {
                 this.pagers.get(fk).pagers.forEach(pager => {
-                    this.add(item);
+                    pager.add([this.cls.getPk(item)]);
                 })
             }
         })

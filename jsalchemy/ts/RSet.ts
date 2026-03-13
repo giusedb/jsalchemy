@@ -28,6 +28,7 @@ export default class RSet {
         this._rpp = rpp;
         this.page = page;
         this.resourceName = resourceName;
+        this._items = [];
     }
 
     async fetch(): Promise<IResource[]> {
@@ -66,18 +67,43 @@ export default class RSet {
         }
         return this;
     }
-    get items(): IResource[] {
-        // Optimistic case
+    getSyncItems() {
         const pks = this.pager.get(this.min, this.max)
-        if (pks.some(x => x === undefined)) {
-            this.pager.require(this.min, this.max + this.rpp)
-            return [];
-        }
+        if (!pks.some(x => x === undefined))
+            return null;
         const items = this.collection.get(...pks);
-        if (items.some(x => x === undefined)) {
-            return [];
-        }
+        if (items.some(x => x === undefined))
+            return null;
         return items
+    }
+    get items(): IResource[] {
+        const waitForItem = async (pks) => {
+            let items = this.collection.get(...pks);
+            while (!items.every(Boolean)) {
+                await sleep(50);
+                items = this.collection.get(...pks);
+            }
+            this._items.length = 0;
+            this._items.push(...items);
+        }
+        const gotPks = (pks) => {
+            console.log('Got PKs ', pks);
+            waitForItem(pks);
+        }
+        gotPks.bind(this);
+        waitForItem.bind(this);
+        const pks = this.pager.get(this.min, this.max, gotPks);
+        if (pks !== null) {
+            gotPks(pks);
+            const items = this.collection.get(...pks)
+            if (items.every(Boolean)) {
+                this._items.length = 0;
+                this._items.push(...items)
+            } else {
+                waitForItem(pks);
+            }
+        }
+        return this._items
     }
     get totalCount() {
         return this.pager.totalCount;

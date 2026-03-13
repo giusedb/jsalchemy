@@ -1,7 +1,7 @@
 import Collection, {getFilterKey, getSortKey} from "./Collection";
 import {FilterFunction, IQueryResult, IResource, SortFunction} from "./interfaces";
 import {ResourceManager} from "./ResourceManager";
-import {indexBy, makeFilter, makeSortFunction} from "./utils";
+import {indexBy, makeFilter, makeSortFunction, sleep} from "./utils";
 
 interface Unplaced {
     item: IResource;
@@ -143,21 +143,32 @@ export class Pager {
      * @param min
      * @param max
      */
-    get(min: number, max: number): string[] {
+    get(min: number, max: number, callBack: Function = null): string[] {
+        const waitForInterval = async (min: number, max: number) => {
+            while (!this.hasInterval(min, max)) {
+                await sleep(50)
+            }
+            callBack(this.get(min, max));
+        }
         const [minPage, maxPage] = this.resolvePages(min, max)
         if (minPage === maxPage) {
             if (!this.pages.has(minPage)) {
                 this.require(min, max);
-                return [undefined];
+                if (callBack)
+                    waitForInterval(min, max);
+                return null
             }
             return this.pages.get(minPage).slice(
                 min % this.collection.cls.rpp,
                 max % this.collection.cls.rpp
             )
         } else {
-            if (![minPage, maxPage].every(x => this.pages.has(minPage))) {
+            if (![minPage, maxPage].every(x => this.pages.has(x))) {
                 this.require(min, max);
-                return [undefined]
+                if (callBack) {
+                    waitForInterval(min, max);
+                }
+                return null;
             }
             return [...this.pages.get(minPage).slice(
                 min % this.collection.cls.rpp,
@@ -167,6 +178,7 @@ export class Pager {
                 max % this.collection.cls.rpp
             )]
         }
+
     }
     require(min: number, max: number) {
         let pages = this.resolvePages(min, max);

@@ -6,6 +6,7 @@ import {ResourceManager} from "./ResourceManager";
 import {JSAlchemyConnection} from "../connection";
 import {ICollections, IResource, IResourceClass} from "./interfaces";
 import {groupBy, indexBy} from "./utils";
+import RSet from "./RSet";
 
 interface OrmOptions {
   endpoint?: string;
@@ -122,10 +123,10 @@ export default class Orm {
    * @param sort {Array<Array<String>>}
    * @returns {Promise<RSet>}
    */
-  async query(resourceName: string, filter: any, sort: string = 'id'): Promise<RSet> {
+  async query(resourceName: string, filter: any, sort: string[] = ['id']): Promise<RSet> {
     // get model default rpp
     const res = await this.resources.describe(resourceName);
-    return new RSet(this.resources, resourceName, filter, {page: 1, sort, rpp: res.rpp});
+    return new RSet(this.resources, resourceName, filter, sort);
   }
 
   /**
