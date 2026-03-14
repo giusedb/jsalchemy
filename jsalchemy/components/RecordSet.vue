@@ -1,20 +1,19 @@
 <script setup>
-import { Orm } from "../orm.js";
-import RSet from '../RSet.js';
-import 'lodash';
+import Orm  from '../ts/Orm.js';
+
+const local = {recordSet: null};
+const iOrm = inject('orm');
 
 const emits = defineEmits(['loading', 'records', 'recordSet']);
 const props = defineProps({
   resource: String,
   filter: Object,
-  sort: Array,
-  page: Number,
-  recordsPerPage: Number,
+  sort: { type: Array, default: () => ['~id'] },
+  page: { type: Number, default: 1 },
+  recordsPerPage: { type: Number, default: 20 },
   localOrm: { type: [Orm, null], default: null },
   name: String,
 });
-const local = {recordSet: null};
-const iOrm = inject('orm');
 const state = reactive({
   records: [],
   touchRecord: 0,
@@ -24,73 +23,65 @@ const state = reactive({
 const orm = computed(() => {
   return props.localOrm || iOrm;
 });
-const total = computed(() => {
-  return local.recordSet?.totalCount;
-});
 
-onMounted(() => {
-  local.recordSet = new RSet(orm.value.resources, props.resource, props.filter, {
-    page: 1,
-    rpp: props.recordsPerPage,
-    sort: props.sort,
-  }, props.name);
-  local.recordSet.on('records', (recs, totalCount) => {
-    if (recs.length === state.records.length) {
-      for (let i = 0; i < recs.length; i ++) {
-        if (recs[i])
-          state.records[i] = recs[i];
-      }
-    } else {
-      state.records.length = 0;
-      state.records.push(...recs);
-    }
-    state.totalCount = totalCount;
+const records = ref([]);
+const total = ref(0);
+const loading = ref(false);
+
+onMounted(async () => {
+  local.rset = await orm.value.query(props.resource, props.filter, props.sort)
+  window.rset = local.rset;
+  if (props.recordsPerPage)
+    local.rset.setRpp(props.recordsPerPage)
+  state.records = local.rset.items;
+  local.rset.on('records', (recs, totalCount) => {
+    records.value = recs
+    total.value = totalCount;
+    // nextTick();
   });
-  local.recordSet.on('loading', (value) => {
-    state.loading = value
-  });
-  local.recordSet.on('paging', (paging) => {
-    if (state.page !== paging.page) {
-      state.page = paging.page;
-    }
-  });
-  emits('recordSet', local.recordSet);
+  // local.recordSet.on('loading', (value) => {
+  //   state.loading = value
+  // });
+  // local.recordSet.on('paging', (paging) => {
+  //   if (state.page !== paging.page) {
+  //     state.page = paging.page;
+  //   }
+  // });
+  emits('recordSet', local.rset);
 });
 onUnmounted(() => {
-  if (local.recordSet)
-    local.recordSet.destroy();
+  // if (local.rset)
+  //   local.rset.destroy();
 })
 
 watch(() => props.page, (newVal, oldVal) => {
   if (newVal !== oldVal)
-    local.recordSet.page = newVal;
+    local.rset.setPage(newVal).refresh();
 });
 watch(() => props.recordsPerPage, (newVal, oldVal) => {
   if (newVal !== oldVal) {
-    local.recordSet.rpp = newVal;
-    local.recordSet.page = 1;
+    local.rset.setRpp(newVal).setPage(1).refresh();
   }
 });
 watch(() => props.filter, (newVal, oldVal) => {
   if (JSON.stringify(newVal) !== JSON.stringify(oldVal)) {
-    local.recordSet.filter = newVal;
-    local.recordSet.page = 1;
+    local.rset.setFilter(newVal).setPage(1).refresh();
   }
 });
 watch(() => props.sort, (newVal, oldVal) => {
   if (JSON.stringify(newVal) !== JSON.stringify(oldVal)) {
-    local.recordSet.sort = newVal;
-    local.recordSet.page = 1;
+    local.rset.setSort(newVal).setPage(1).refresh();
   }
 });
-
 </script>
 
 <template>
-  <slot name="default" v-bind:records="state.records" v-bind:total="state.totalCount" v-bind:loading="state.loading">
+  <slot name="default"
+        v-bind:records="records"
+        v-bind:total="total"
+        v-bind:loading="loading">
     ...
   </slot>
-
 </template>
 
 <style scoped>

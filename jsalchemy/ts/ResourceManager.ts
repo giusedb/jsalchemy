@@ -5,7 +5,7 @@ import Collection from "./Collection";
 import Toucher from "./Toucher";
 import {FilterCacher} from "./Reducer";
 import {Logger} from "../logger";
-import {DataPayload, IOrmOptions, IResource, IResourceClass, IResourceDef} from "./interfaces";
+import {DataPayload, IGotDataOptions, IOrmOptions, IResource, IResourceClass, IResourceDef} from "./interfaces";
 import { makeResourceClass } from "./classgen";
 import {Autolinker} from "./Autolinker";
 import {indexBy, sleep} from "./utils";
@@ -60,12 +60,14 @@ export class ResourceManager {
   gotAll: Set<string>;
   filterCacher: FilterCacher;
   autoLinker: Autolinker;
+  reactive: Function;
 
   constructor(orm: any, options: IOrmOptions) {
     this.orm = orm;
     this.touch = new Toucher();
     this.events = orm.$events;
     this.connection = new JSAlchemyConnection(this, options.endpoint, options.autoLogin);
+    this.reactive = options.reactive;
     this.emit = this.events.emit.bind(this.events);
 
     // mode-based objects
@@ -124,7 +126,8 @@ export class ResourceManager {
     verb: string, 
     kwargs: any, 
     ignoreResults?: boolean, 
-    fullResult?: boolean
+    fullResult?: boolean,
+    gotDataOptions?: any,
   ): Promise<any> {
     // fetching asynchronous model from server
     await this.describe(modelName);
@@ -132,7 +135,7 @@ export class ResourceManager {
     const payload = data.payload;
     
     if (!ignoreResults) {
-      await this.gotData(data);
+      await this.gotData(data, gotDataOptions);
     }
     
     if (fullResult) {
@@ -161,7 +164,6 @@ export class ResourceManager {
     // const model = await this.describe(modelName);
     return new RSet(this, modelName, filter);
   }
-
   async get(resourceName: string, pks: string[] | string): Promise<any> {
     const model = await this.describe(resourceName);
     let filter: Filter = {};
@@ -187,8 +189,7 @@ export class ResourceManager {
       return ret
     return ret[0]
   }
-
-  async gotData(data: DataPayload): Promise<DataPayload> {
+  async gotData(data: DataPayload, options: IGotDataOptions = {}): Promise<DataPayload> {
     // receive all data from every end point
     if (typeof data === 'string') {
       console.log('data ' + data + ' refused from gotData()');
@@ -261,7 +262,7 @@ export class ResourceManager {
         const collection = this.getCollection(resourceName);
         if (!collection) return;
 
-        const reItems = collection.bulkInsert(rawData, Boolean(hydratePagers));
+        const reItems = collection.bulkInsert(rawData, Boolean(hydratePagers), options);
         const updateItems = reItems.pop();
         const newItems = reItems.pop();
 

@@ -353,18 +353,22 @@ export function makeResourceClass(orm, resMan, model) {
     model.$pk.forEach(k => modified[k] = this[k]);
     const isNew = ! this.$pk
     const res = await orm.resources.verb(model.name,
-      isNew ? 'post' : 'put', modified, true, true);
-    if (res.new && res.new[model.name] && res.new[model.name].length) {
-      this.$init(res.new[model.name][0]);
-    }
+      isNew ? 'post' : 'put', modified, false, true, {dontCreate: true, savedItems: [this]});
+    // if (res.new && res.new[model.name] && res.new[model.name].length) {
+    //   this.$init(res.new[model.name][0]);
+    // }
     const collection = resMan.getCollection(model.name);
-    if (isNew) {
-        collection.add(this);
-    } else {
-        collection.update(this);
-    }
+    // if (isNew) {
+    //     collection.add(this);
+    //     resMan.emit('new-' + Klass.name, this);
+    //     resMan.emit('received-' + Klass.name);
+    // } else {
+    //     collection.update(this);
+    //     resMan.emit('updated-' + Klass.name, this);
+    //     resMan.emit('received-' + Klass.name);
+    // }
     const ret = collection.get(this.$pk);
-    resMan.emit('got-data', ret);
+    // resMan.emit('got-data', ret);
     return ret && ret[0];
   }
   Klass.prototype.$delete = async function() {

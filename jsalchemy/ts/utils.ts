@@ -1,4 +1,10 @@
-import {FilterFunction, SortFunction} from "./interfaces";
+import {FilterFunction, IResource, SortFunction} from "./interfaces";
+
+export interface IUnplaced {
+    item: IResource,
+    before: number,
+    after: number
+}
 
 export function groupBy(array: object[], key: string | Function): Record<string, object[]> {
     const ret = {};
@@ -82,4 +88,20 @@ export function makeSortFunction(sort: string | string[]): SortFunction {
     }).join('');
     return <SortFunction>new Function(['a', 'b'], content + '\nreturn 0;');
 
+}
+export function arrayEqual(a1: string[], a2: string[]): boolean {
+    if (a1.length !== a2.length)
+        return false
+    for (let i = 0; i < a1.length; i ++) {
+        if (a1[i] !== a2[i])
+            return false;
+    }
+    return true
+}
+export function range(_from: number = 0, to: number = 0) {
+    if (to === 0) {
+        to = _from
+        _from = 0;
+    }
+    return Array.from({length: to - _from}, (_, i) => _from + i)
 }

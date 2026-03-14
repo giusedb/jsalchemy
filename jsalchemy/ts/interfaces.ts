@@ -50,6 +50,7 @@ export interface IResource {
     $raw: Object
     $dirty: boolean
     $attributeTypes: Object
+    $init(a: Object, b? :Object): void
     rpp: number
     // $collection: Collection
     [key: string]: any
@@ -77,7 +78,7 @@ export type FilterFunction = {
 }
 
 export type SortFunction = {
-    (record: IResource): number
+    (record: IResource, record: IResource): number
 }
 
 export interface IQueryResult {
@@ -110,3 +111,7 @@ export type DataPayload = {
   payload?: any;
 };
 
+export interface IGotDataOptions {
+    dontCreate?: boolean;
+    savedItems: IResource[]
+}

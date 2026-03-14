@@ -1,4 +1,4 @@
-import {FilterFunction, IResource, IResourceClass, IResourceDef, ISort} from "./interfaces";
+import {FilterFunction, IGotDataOptions, IResource, IResourceClass, IResourceDef, ISort} from "./interfaces";
 import {Pager} from "./Pager";
 import utils from "../utils";
 import Toucher from "./Toucher";
@@ -79,9 +79,8 @@ class Collection {
         const ret: IResource[] = []
         if (existing.length) {
             this.pagers.forEach((sort, i) => {
-                sort.pagers.forEach(pager => {
-                    pager.remove(existing);
-                });
+                sort.totalCount -= Math.max(...sort.pagers.values()
+                    .map(pager => pager.remove(existing)))
             })
         }
         for (const pk of pks) {
@@ -104,7 +103,7 @@ class Collection {
         }
         return keys.map(x => this.pkIndex.get(x))
     }
-    bulkInsert(items: IResource[], hydratePagers: boolean = false): [IResource[], any[]] {
+    bulkInsert(items: IResource[], hydratePagers: boolean = false, options: IGotDataOptions): [IResource[], any[]] {
         const getKey = this.cls.getPk;
         const idxPk = Object.fromEntries(items.map(x => [getKey(x), x]))
         const oldKeys = [];
@@ -116,7 +115,15 @@ class Collection {
                 newKeys.push(key);
             }
         }
-        const newItems: IResource[] = newKeys.map(k => new this.cls(idxPk[k], {}));
+        let newItems: IResource[]
+        if (options.dontCreate) {
+            for (let i = 0; i < options.savedItems.length; i ++) {
+                options.savedItems[i].$init(items[i]);
+            }
+            newItems = options.savedItems;
+        }
+        else
+            newItems = newKeys.map(k => new this.cls(idxPk[k], {}));
         const existingItems: [IResource, object][] = oldKeys.map(k => {
             return [this.pkIndex.get(k), idxPk[k]]
         })
@@ -190,7 +197,7 @@ class Collection {
         }
         return ret
     }
-    getPager(filter: Record<string, string[]>, sort: Array<string>): Pager {
+    getPager(filter: Record<string, string[]>, sort: Array<string> = ['~id']): Pager {
         const filterKey = getFilterKey(filter)
         const sortKey = getSortKey(sort)
         if (!this.pagers.has(filterKey)) {

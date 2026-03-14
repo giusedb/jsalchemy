@@ -2,7 +2,8 @@ import {Pager} from "./Pager";
 import Collection, {getFilterKey, getSortKey} from "./Collection";
 import {ResourceManager} from "./ResourceManager";
 import {IResource} from "./interfaces";
-import {sleep} from "./utils";
+import {arrayEqual, sleep} from "./utils";
+import {NamedEventManager} from "./NamedEventManager";
 
 export default class RSet {
     pager: Pager
@@ -16,6 +17,10 @@ export default class RSet {
     protected _filterKey: string
     protected _sortKey: string
     protected _items: IResource[]
+    protected prevKeys : string[];
+    loading: boolean
+    evt: NamedEventManager
+    on: Function
 
     constructor(resMan: ResourceManager, resourceName: string,
                 filter: Record<string, string[]> = {}, sorting: string[] = ['id'],
@@ -29,16 +34,46 @@ export default class RSet {
         this.page = page;
         this.resourceName = resourceName;
         this._items = [];
+        this.loading = false;
+        this.resMan.on('received-' + resourceName, this.refresh.bind(this));
+        this.resMan.on('deleted-' + resourceName, this.refresh.bind(this));
+        this.evt = new NamedEventManager()
+        this.on = this.evt.on.bind(this.evt);
+        this.prevKeys = [];
     }
 
+    refresh(): IResource[] {
+        const waitForItem = async (pks) => {
+            let items = this.collection.get(...pks);
+            while (!items.every(Boolean)) {
+                await sleep(50);
+                items = this.collection.get(...pks);
+            }
+            this.push(items);
+        }
+        waitForItem.bind(this);
+        const pks = this.pager.get(this.min, this.max, waitForItem);
+        if ((pks !== null) && (!arrayEqual(pks, this.prevKeys))) {
+            this.prevKeys = pks;
+            const items = this.collection.get(...pks)
+            if (items.every(Boolean)) {
+                this.push(items);
+            } else {
+                waitForItem(pks);
+            }
+        }
+        return this._items
+    }
     async fetch(): Promise<IResource[]> {
+        this.evt.emit('loading', true);
         while (!this.collection.cls) {
             await sleep(50);
         }
         const pks = await this.pager.fetch(this.min, this.max + this.rpp);
         const items = await this.resMan.get(this.resourceName, pks)
         if (items)
-            this._items = items.slice(0, this.rpp);
+            this.push(items.slice(0, this.rpp));
+        this.evt.emit('loading', false);
         return this._items;
     }
     setPage(page: number) {
@@ -76,34 +111,15 @@ export default class RSet {
             return null;
         return items
     }
+    push(items: IResource[]) {
+        this._items.length = 0;
+        this._items.push(...items);
+        // console.log('Push items', items);
+        this.evt.emit('records', items, this.totalCount);
+        return this._items;
+    }
     get items(): IResource[] {
-        const waitForItem = async (pks) => {
-            let items = this.collection.get(...pks);
-            while (!items.every(Boolean)) {
-                await sleep(50);
-                items = this.collection.get(...pks);
-            }
-            this._items.length = 0;
-            this._items.push(...items);
-        }
-        const gotPks = (pks) => {
-            console.log('Got PKs ', pks);
-            waitForItem(pks);
-        }
-        gotPks.bind(this);
-        waitForItem.bind(this);
-        const pks = this.pager.get(this.min, this.max, gotPks);
-        if (pks !== null) {
-            gotPks(pks);
-            const items = this.collection.get(...pks)
-            if (items.every(Boolean)) {
-                this._items.length = 0;
-                this._items.push(...items)
-            } else {
-                waitForItem(pks);
-            }
-        }
-        return this._items
+        return this.refresh();
     }
     get totalCount() {
         return this.pager.totalCount;
@@ -135,7 +151,6 @@ export default class RSet {
     get min (): number {
         return this._rpp * this._page;
     }
-
     get max () {
         return this._rpp * (this._page + 1)
     }
