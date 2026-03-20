@@ -1,0 +1,19 @@
+{
+  "target": "esnext",
+  "module": "commonjs",
+  "compilerOptions": {
+    "lib": [
+      "ES7",
+      "ES6",
+//      "ES2015.Generator",
+//      "ES2015.Iterable",
+      "DOM",
+      "ESNext",
+      "ESNext.AsyncIterable",
+      "ESNext.Array",
+      "ESNext.Intl",
+      "ESNext.Symbol",
+      "ES2015.Collection",
+    ]
+  }
+}
