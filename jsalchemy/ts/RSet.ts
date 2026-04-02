@@ -18,6 +18,7 @@ export default class RSet {
     protected _sortKey: string
     protected _items: IResource[]
     protected prevKeys : string[];
+    isComplete: boolean;
     loading: boolean
     evt: NamedEventManager
     on: Function
@@ -28,6 +29,7 @@ export default class RSet {
         this.resMan = resMan;
         this.collection = resMan.getCollection(resourceName);
         this.pager = this.collection.getPager(filter, sorting);
+        this.isComplete = this.pager.isComplete;
         this._filter = filter;
         this._sort = sorting
         this._rpp = rpp;
@@ -37,11 +39,19 @@ export default class RSet {
         this.loading = false;
         this.resMan.on('received-' + resourceName, this.refresh.bind(this));
         this.resMan.on('deleted-' + resourceName, this.refresh.bind(this));
+        this.resMan.on('pager-unified', this.switchPager.bind(this));
         this.evt = new NamedEventManager()
         this.on = this.evt.on.bind(this.evt);
         this.prevKeys = [];
     }
 
+    switchPager(filter: string, pager: Pager) {
+        if (getFilterKey(this.filter) === filter) {
+            console.log('RSet switching pager ...')
+            this.pager = pager;
+        }
+        this.isComplete = true;
+    }
     refresh(): IResource[] {
         const waitForItem = async (pks) => {
             let items = this.collection.get(...pks);
@@ -52,6 +62,9 @@ export default class RSet {
             this.push(items);
         }
         waitForItem.bind(this);
+        if (this.isComplete) {
+            this.pager.sort = this._sort;
+        }
         const pks = this.pager.get(this.min, this.max, waitForItem);
         if ((pks !== null) && (!arrayEqual(pks, this.prevKeys))) {
             this.prevKeys = pks;
@@ -103,6 +116,9 @@ export default class RSet {
         return this;
     }
     getSyncItems() {
+        if (this.isComplete) {
+            this.pager.sort = this._sort;
+        }
         const pks = this.pager.get(this.min, this.max)
         if (!pks.some(x => x === undefined))
             return null;

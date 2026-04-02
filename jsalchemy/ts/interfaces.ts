@@ -70,7 +70,8 @@ export interface IResourceIndex {
 
 export interface ISort {
     totalCount: number;
-    pagers: Map<string, Pager>
+    isComplete: boolean;
+    pagers: Map<string, Pager>;
 }
 
 export type FilterFunction = {
