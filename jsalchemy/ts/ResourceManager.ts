@@ -207,9 +207,7 @@ export class ResourceManager {
         const collection = this.getCollection(resourceName);
         if (!collection) return;
         
-        const idx = collection.pkIndex;
-        const xx = rawData.filter(x => idx.has(x))
-        const deleted = collection.delete(...xx);
+        const deleted = collection.delete(...rawData);
         
         if (deleted.length) {
           this.emit('deleted-' + resourceName, deleted);

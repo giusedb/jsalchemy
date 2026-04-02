@@ -51,7 +51,7 @@ class Collection {
         this.filterFuncs.forEach((func, fk, map) => {
             if (func(item)) {
                 this.pagers.get(fk).pagers.forEach(pager => {
-                    pager.add([this.cls.getPk(item)]);
+                    pager.add([item]);
                 })
             }
         })
@@ -69,20 +69,17 @@ class Collection {
                 });
             } else if (!oldIn && newIn) {
                 sort.pagers.forEach((pager) => {
-                    pager.add([getPk(item)]);
+                    pager.add([item]);
                 })
             }
         });
     }
     delete(...pks: string[]): IResource[] {
-        const existing = pks.filter(x => this.pkIndex.has(x))
         const ret: IResource[] = []
-        if (existing.length) {
-            this.pagers.forEach((sort, i) => {
-                sort.totalCount -= Math.max(...sort.pagers.values()
-                    .map(pager => pager.remove(existing)))
-            })
-        }
+        this.pagers.forEach((sort, i) => {
+            sort.totalCount -= Math.max(...sort.pagers.values()
+                .map(pager => pager.remove(pks)))
+        })
         for (const pk of pks) {
             if (this.pkIndex.has(pk))
                 ret.push(this.pkIndex.get(pk))
@@ -134,7 +131,7 @@ class Collection {
                 if (filtered.length) {
                     sort.totalCount += filtered.length;
                     for (let pager of sort.pagers.values()) {
-                        pager.add(filtered.map(getKey));
+                        pager.add(filtered);
                     }
                 }
             }
@@ -150,7 +147,7 @@ class Collection {
             let toAdd = [];
             let filterFunc = this.filterFuncs.get(filterKey);
             for (let item of items) {
-                (filterFunc(item) ? toAdd : toRemove).push(getPk(item));
+                (filterFunc(item) ? toAdd : toRemove).push(item);
             }
             if (toAdd.length) {
                 sort.totalCount += toAdd.length
@@ -201,10 +198,13 @@ class Collection {
         const filterKey = getFilterKey(filter)
         const sortKey = getSortKey(sort)
         if (!this.pagers.has(filterKey)) {
-            this.pagers.set(filterKey, { totalCount: null, pagers: new Map() });
+            this.pagers.set(filterKey, { totalCount: null, pagers: new Map(), isComplete: false });
             this.filterFuncs.set(filterKey, utils.makeFilter(filter))
         }
         const iSort = this.pagers.get(filterKey)
+        if (iSort.isComplete) {
+            return iSort.pagers.get('');
+        }
         if (!iSort.pagers.has(sortKey)) {
             iSort.pagers.set(sortKey, new Pager(this, filter, sort));
         }
