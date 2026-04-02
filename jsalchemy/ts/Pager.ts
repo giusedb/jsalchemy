@@ -8,7 +8,7 @@ interface IMinMax {
     max: number
 }
 
-class Unplaced {
+export class Unplaced {
     item: IResource
     before: number
     after: number
@@ -25,7 +25,7 @@ export class Pager {
     filter: Record<string, string[]>
     filterKey: string
     filterFunc: FilterFunction
-    sort: string[]
+    _sort: string[]
     sortKey: string
     sortFunc: SortFunction
     newBasket: string[]
@@ -34,7 +34,10 @@ export class Pager {
     requiredPages: [number, Pager][];
     waitingPages: number[];
     minMaxItems: Map<number, IMinMax>
-    rpp: number
+    rpp: number;
+    _isComplete: boolean;
+    page: Array<string>;
+    sorted: Array<string>;
 
     unplacedItems: Unplaced[]
 
@@ -44,7 +47,7 @@ export class Pager {
         this.collection = collection
         this.resMan = collection.resMan
         this.filter = filter;
-        this.sort = sort;
+        this._sort = sort;
         this.filterKey = getFilterKey(this.filter);
         this.filterFunc = makeFilter(filter);
         this.sortKey = getSortKey(this.sort);
@@ -58,134 +61,139 @@ export class Pager {
         this.minMaxItems = new Map()
         this.rpp = this.collection.cls.rpp;
     }
-    resolvePages(min: number, max: number): [number, number] {
+    resolvePages(min: number, max: number): [number, number, number] {
         if (this.newBasket.length + this.removeBasket.length + this.updateBasket.length)
             this.processBaskets()
         else
             this.placeUnplaced()
-        const minPage = Math.floor(min / this.collection.cls.rpp);
-        const maxPage = Math.floor(max / this.collection.cls.rpp);
-        return [minPage, maxPage]
+        const offset = this.unplacedItems.filter(unplaced => unplaced.after < min).length
+        const minPage = Math.floor(min / this.rpp);
+        const maxPage = Math.floor(max / this.rpp);
+        return [minPage, maxPage, offset]
     }
-    placeItems(items: IResource[]) {
+    /*
+     * Place the Unplaced items in the pager.
+     * each Unplaced item in the `unplacedItems` array has a `item` property that is the item to be placed
+     * and an `after` property that is the index of the item and the page after which the item should be placed.
+     * the `Unplaced.before` property is the index of the item and the page before which the item should be placed.
+     *
+     * Insert the items in the pager in the correct position according to `this.sortFunc` function.
+     * If an item has no precise position add the `Unplaced` to the im
+     */
+    placeUnplaced() {
         const getPk = this.collection.cls.getPk;
-        items.sort(this.sortFunc)
-        const nextItem = ()=> {
-            if (items.length) {
-                const item = items.shift();
-                return [item, new Unplaced(item)]
-            }
-            return [null, null]
+        if (this.isComplete) {
+            this.page.push(
+                ...this.unplacedItems.splice(0, this.unplacedItems.length)
+                    .map(unplaced => getPk(unplaced.item)))
         }
-        let exploredPages = 0;
-        for (let [nPage, page] of this.pages.entries()) {
-            exploredPages ++
-            let decoded = page.map(x => this.collection.pkIndex.get(x));
-            let i = 0;
-            let inserted = 0
-            let item: IResource
-            let place: Unplaced;
-            [item, place] = nextItem()
-            if (!item) break
-            console.log(decoded.map(x => x ? this.sortFunc(x, item): null))
-            const max = Math.min(decoded.length, this.rpp)
-            for (; i < page.length; i++) {
-                let pageItem = this.collection.pkIndex.get(page[i]);
-                if (!pageItem)
-                    continue
-                let cmp = this.sortFunc(pageItem, item);
-                if (cmp < 1) {
-                    place.after = i;
-                } else {
-                    place.before = i;
-                    if (place.after === (i - 1)) {
-                        page.splice(i, 0, getPk(item))
-                        inserted ++
-                    } else if ((place.after === undefined) && (place.before === 0)) {
-                        if (nPage === 0) {
-                            page.unshift(getPk(item))
-                            inserted++
-                        }
-                    } else if ((place.after === undefined) && (place.before === this.rpp)) {
-                        page.push(getPk(item));
-                        inserted ++
-                    } else {
-                        if (place.before)
-                            place.before += (nPage * this.rpp)
-                        if (place.after)
-                            place.after += (nPage * this.rpp)
-                        this.unplacedItems.push(place)
-                    }
-                    [item, place] = nextItem()
-                    if (!item) break
-                }
-            }
-            if (!place) break
-            // if it's the last page
-            if (Math.floor(this.totalCount / this.rpp) === nPage) {
-                page.push(getPk(item));
-                inserted++
-                if (items.length) {
-                    page.push(...items.map(x => getPk(x)))
-                    break
-                }
-            }
-            if ((place.after !== undefined) && !place.before && (i == max)) {
-                if (Math.floor(this.totalCount / this.rpp) === nPage) {
-                }
-            } else if ((nPage === 0) && (page.length === 0)) {
-                page.push(getPk(item));
-            } else {
-                this.unplacedItems.push(place)
-            }
-        }
-    }
-    async placeUnplaced() {
-        const getPk = this.collection.cls.getPk;
-        this.unplacedItems.sort((x, y) => (x.after || 0) - (y.after || 0));
+
+        const field = this.sort[0].replace('~', '');
+
+        const unplaceds: Unplaced[] = [];
+        this.unplacedItems.sort((x, y) => this.sortFunc(x.item, y.item))
+        let lastValid = 0;
+        let lastVisited = 0;
+        let pageNumbers = [...this.pages.keys()];
+        let lastPage = Math.min(...pageNumbers);
         let unplaced = this.unplacedItems.shift();
-        const basket = [];
+        let j = 0
+        let inserted = 0
+        let page: string[]
+        let found: boolean
+        let offset: number
+        let cmp: number
+
+        if (unplaced && (lastPage === 0) && (this.pages.get(0).length === 0)) {
+            this.pages.get(0).push(getPk(unplaced.item));
+            inserted ++
+            unplaced = this.unplacedItems.shift();
+        }
+
         while (unplaced) {
-            let after = unplaced.after || 0;
-            let nPage = Math.floor((after || 0) / this.rpp)
-            if (this.invalids.has(nPage))
-                this.pages.set(nPage,
-                    await this.resMan.verb(this.collection.cls.name, 'query', this.filterFor(nPage), false, false));
-            if (this.pages.has(nPage)) {
-                let page = this.pages.get(nPage);
-                let offset = nPage * this.rpp
-                for (let i = unplaced.after % this.rpp; i < Math.max(page.length, unplaced.after - offset); i ++) {
-                    let item = this.collection.pkIndex.get(page[i]);
-                    if (!item) continue;
-                    if (this.sortFunc(item, unplaced.item) < 1) {
-                        unplaced.after = i + offset;
+            console.log(`pick item ${unplaced.item[field]}`)
+            if (this.pages.values().some(page => page.includes(getPk(unplaced.item)))) {
+                console.log('Item already in pager')
+                unplaced = this.unplacedItems.shift();
+                continue
+            }
+            if (unplaced.after) {
+                unplaced.after -= inserted;
+                lastPage = Math.floor(unplaced.after / this.rpp);
+                j = lastPage * unplaced.after % this.rpp
+            } else {
+                j = lastVisited;
+            }
+            page = this.pages.get(lastPage);
+            offset = this.rpp * lastPage;
+            found = false;
+            while (!found) {
+                let counterItem = this.collection.pkIndex.get(page[j]);
+                if (counterItem) {
+                    lastValid = lastVisited
+                    cmp = this.sortFunc(counterItem, unplaced.item);
+                    console.log(unplaced.item[field], cmp == 1 ? '<' : '>', counterItem[field])
+                    if (cmp < 0) {
+                        unplaced.after = j + offset
                     } else {
-                        unplaced.before = i + offset;
-                        if (unplaced.after === (unplaced.before - 1)) {
-                            page.splice(unplaced.before, 0, getPk(unplaced.item));
+                        found = true
+                        unplaced.before = j + offset;
+                    }
+                } else {
+                    console.log(`Undefined. Skip ${page[j]}.`)
+                }
+                if (found) {
+                    if (unplaced.before === (unplaced.after + 1)) {
+                        page.splice(unplaced.before, 0, getPk(unplaced.item));
+                        inserted++;
+                    } else if (unplaced.before === 0) {
+                        page.unshift(getPk(unplaced.item));
+                        inserted++;
+                    } else {
+                        unplaceds.push(unplaced)
+                    }
+                } else {
+                    if (j >= this.rpp) {
+                        console.log('Reached the rpp')
+                    }
+                    if (j < (page.length - 1))
+                        j++;
+                    else {
+                        let idxPage = pageNumbers.indexOf(lastPage);
+                        if (pageNumbers.length > (idxPage + 1)){
+                            console.log('check next page')
+                            lastPage = pageNumbers[idxPage + 1];
+                            page = this.pages.get(lastPage);
+                            offset = this.rpp * lastPage;
+                            j = 0;
                         } else {
-                            basket.push(unplaced);
+                            console.log('Its last page. I add it')
+                            page.push(getPk(unplaced.item));
+                            inserted++;
+                            found = true;
+                            break;
                         }
-                        break;
                     }
                 }
-            } else {
-                console.log('Discarding it on a page we don\'t have', item.item)
             }
             unplaced = this.unplacedItems.shift();
         }
-        this.unplacedItems.push(...basket)
-    }
-    inPage(key: string): number {
-        for (let [num, page] of this.pages.entries()) {
-            if (page.includes(key))
-                return num
+        this.unplacedItems.push(...unplaceds);
+        console.log('Clean up pages')
+        for (let [numPage, page] of this.pages.entries()) {
+            let size = this.rpp - this.unplacedItems.filter(
+                u => [u.before, u.after].every(
+                    x => x >= (numPage * this.rpp) && x < ((numPage + 1) * this.rpp))
+            ).length;
+            if ((page.length > size) && (this.pages.has(numPage + 1))) {
+                this.pages.get(numPage + 1).unshift(...page.splice(size));
+            }
+            if ((page.length < size) && (this.pages.has(numPage + 1))) {
+                page.push(...this.pages.get(numPage + 1).splice(0, size - page.length));
+            }
         }
-        return -1
     }
     processBaskets() {
-        let missingKeys: string[] = []
-        const getPk = this.collection.cls.getPk;
         while (this.removeBasket.length) {
             let key = this.removeBasket.shift();
             for (let [nPage, page] of this.pages.entries()) {
@@ -199,11 +207,6 @@ export class Pager {
             }
         }
         this.placeUnplaced();
-        const newItems = this.collection.get(...this.newBasket)
-        this.newBasket.splice(0, this.newBasket.length)
-        if (newItems.length) {
-            this.placeItems(newItems);
-        }
     }
     filterFor(nPage: number) {
         return {
@@ -216,7 +219,7 @@ export class Pager {
         }
     }
     async fetch(min: number, max: number): Promise<string[]> {
-        const [minPage, maxPage] = this.resolvePages(min, max)
+        const [minPage, maxPage, offset] = this.resolvePages(min, max)
         for (let page of [minPage, maxPage]) {
             if (this.pages.has(page))
                 continue
