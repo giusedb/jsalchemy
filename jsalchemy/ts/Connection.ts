@@ -2,7 +2,7 @@ import {NamedEventManager} from './NamedEventManager';
 import {ResourceManager} from './ResourceManager';
 import storage from "./storage";
 
-import utils from "../utils.js";
+import { xdr, kebabCase } from "./utils";
 
 export class JSAlchemyWsConnection {
   private connection: any;
@@ -92,7 +92,7 @@ export class JSAlchemyConnection {
     if (modelName in this.modelWaiting) {
       return this.modelWaiting[modelName] = new Promise((a, r) => {
         this.modelWaiting[modelName].then(_ => {
-          this.post(`${utils.kebabCase(modelName)}.${verb}`, kwargs)
+          this.post(`${kebabCase(modelName)}.${verb}`, kwargs)
             .then(a)
             .catch(r);
         })
@@ -100,7 +100,7 @@ export class JSAlchemyConnection {
         delete this.modelWaiting[modelName];
       });
     }
-    return this.modelWaiting[modelName] = this.post(`${utils.kebabCase(modelName)}.${verb}`, kwargs)
+    return this.modelWaiting[modelName] = this.post(`${kebabCase(modelName)}.${verb}`, kwargs)
       .finally(_ => {
         delete this.modelWaiting[modelName];
       });
@@ -117,7 +117,7 @@ export class JSAlchemyConnection {
     }
     data.__token__ = this.status.token;
     try {
-      const xhr = await utils.xdr(endPoint + url, data, this.status.application, this.status.token);
+      const xhr = await xdr(endPoint + url, data, this.status.application, this.status.token);
       this.emit('http-response', xhr.responseText, xhr.status, url, data);
       this.emit('http-response-' + xhr.status, xhr.responseText, url, data);
       if (xhr.responseData) {
@@ -139,7 +139,7 @@ export class JSAlchemyConnection {
   login(username: string, password: string): Promise<any> {
     const self = this;
     return new Promise((accept) => {
-      utils.xdr(
+      xdr(
         this.endPoint + 'auth/login',
         {
           username: username || '',

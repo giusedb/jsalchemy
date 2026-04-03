@@ -1,4 +1,5 @@
 import {FilterFunction, IResource, SortFunction} from "./interfaces";
+import _ from "lodash";
 
 export interface IUnplaced {
     item: IResource,
@@ -49,7 +50,7 @@ export function makeFilter(filter: Record<string, string[]>, unifier: string = '
         if (vals.length === 1) {
           return `x.${key} === ${JSON.stringify(vals[0])}`
         }
-        return `[${vals.map(JSON.stringify).join(", ")}].includes(x.${key})`
+        return `[${vals.map(JSON.stringify).join(" ")}]`;
       })
       .join(` ${unifier} `);
     return <FilterFunction>new Function("x", "    if (!x) return false;\n    return " + source);
@@ -62,22 +63,22 @@ export function makeSortFunction(sort: string | string[]): SortFunction {
       sortArray = sort
     }
     const content = sortArray.map(item => {
-      item = item.trim();
-      if (item.startsWith('~')) {
-        return {
-          field: item.substring(1),
-          order: 'desc',
+        item = item.trim();
+        if (item.startsWith('~')) {
+            return {
+                field: item.substring(1),
+                order: 'desc',
+            }
+        } else {
+            return {
+                field: item,
+                order: 'asc'
+            }
         }
-      } else {
-        return {
-          field: item,
-          order: 'asc'
-        }
-      }
     }).map(item => {
         let ret = ' 1: -1';
         if (item.order === 'asc') {
-           ret = '-1: 1';
+            ret = '-1: 1';
         }
         return `
         if (a.${item.field} !== b.${item.field}) {
@@ -87,7 +88,6 @@ export function makeSortFunction(sort: string | string[]): SortFunction {
         }`
     }).join('');
     return <SortFunction>new Function(['a', 'b'], content + '\nreturn 0;');
-
 }
 export function arrayEqual(a1: string[], a2: string[]): boolean {
     if (a1.length !== a2.length)
@@ -104,4 +104,65 @@ export function range(_from: number = 0, to: number = 0) {
         _from = 0;
     }
     return Array.from({length: to - _from}, (_, i) => _from + i)
+}
+export async function xdr(url: string, data: any, application: string, token: string, formEncode: boolean = false): Promise<any> {
+    return new Promise(function(accept, reject) {
+        let req;
+        if (!data) {
+            data = {};
+        }
+        
+        if (XMLHttpRequest) {
+            req = new XMLHttpRequest();
+            req.onreadystatechange = () => {
+                if (req.readyState === 4) {
+                    let responseData = null;
+                    try{
+                        responseData = JSON.parse(req.responseText);
+                    } catch (a){
+                        responseData = null;
+                    }
+                    let response = {
+                        responseData: responseData,
+                        responseText: req.responseText,
+                        status: req.status,
+                        request: req
+                    };
+                    if ((req.status >= 200) && (req.status < 400)) {
+                        accept(response);
+                    } else {
+                        reject(response);
+                    }
+                }
+            };
+        } else if(XDomainRequest){
+            req = new XDomainRequest();
+            req.onload = function() {
+                accept(req.responseText,req.statusText, req);
+            };
+        } else {
+            reject(new Error('CORS not supported'));
+        }
+        
+        req.onerror = reject;
+        req.open('POST', url, true);
+        req.setRequestHeader('Accept','application/json');
+        if (token) { data.__token__ = token }
+        if (!formEncode){
+            req.setRequestHeader('Content-Type','application/json');
+            data = JSON.stringify(data);
+        } else {
+            req.setRequestHeader('Content-Type','application/x-www-form-urlencoded');
+            data = Object.keys(data).map(k => k + '=' + encodeURI(data[k].toString())).join('&');
+        }
+        try {
+          req.send(data);
+        } catch (error) {
+          reject(error);
+        }
+    });
+}
+export function kebabCase(str: string): string {
+  let ret = str.replace(/[A-Z]([a-z]|[0-9])+/g, (x) => `-${x.toLowerCase()}`);
+  return (ret.startsWith('-') ? ret.substring(1) : ret).toLowerCase();
 }
