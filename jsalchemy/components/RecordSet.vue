@@ -28,7 +28,7 @@ const records = ref([]);
 const total = ref(0);
 const loading = ref(false);
 
-onMounted(async () => {
+const initRset = async () => {
   local.rset = await orm.value.query(props.resource, props.filter, props.sort)
   window.rset = local.rset;
   if (props.recordsPerPage)
@@ -37,40 +37,52 @@ onMounted(async () => {
   local.rset.on('records', (recs, totalCount) => {
     records.value = recs
     total.value = totalCount;
-    // nextTick();
   });
-  // local.recordSet.on('loading', (value) => {
-  //   state.loading = value
-  // });
-  // local.recordSet.on('paging', (paging) => {
-  //   if (state.page !== paging.page) {
-  //     state.page = paging.page;
-  //   }
-  // });
+  local.rset.on('loading', (value) => {
+    state.loading = value
+  });
+  local.rset.on('paging', (paging) => {
+    if (state.page !== paging.page) {
+      state.page = paging.page;
+    }
+  });
   emits('recordSet', local.rset);
+  nextTick(() => {
+    local.rset.evt.emit('records', local.rset._items, local.rset.totalCount);
+  });
+}
+
+onMounted(async () => {
+  initRset(props)
 });
 onUnmounted(() => {
-  // if (local.rset)
-  //   local.rset.destroy();
+  if (local.rset) {
+    console.log('Disposing RSet')
+    local.rset.dispose();
+  }
 })
-
 watch(() => props.page, (newVal, oldVal) => {
-  if (newVal !== oldVal)
+  if (newVal !== oldVal) {
     local.rset.setPage(newVal).refresh();
+    emits('update:page', newVal);
+  }
 });
 watch(() => props.recordsPerPage, (newVal, oldVal) => {
   if (newVal !== oldVal) {
     local.rset.setRpp(newVal).setPage(1).refresh();
+    emits('update:page', 1);
   }
 });
 watch(() => props.filter, (newVal, oldVal) => {
   if (JSON.stringify(newVal) !== JSON.stringify(oldVal)) {
-    local.rset.setFilter(newVal).setPage(1).refresh();
+    local.rset.dispose();
+    initRset(props);
   }
 });
 watch(() => props.sort, (newVal, oldVal) => {
   if (JSON.stringify(newVal) !== JSON.stringify(oldVal)) {
     local.rset.setSort(newVal).setPage(1).refresh();
+    emits('update:page', 1);
   }
 });
 </script>

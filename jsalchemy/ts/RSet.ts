@@ -22,6 +22,7 @@ export default class RSet {
     loading: boolean
     evt: NamedEventManager
     on: Function
+    eventIds: number[]
 
     constructor(resMan: ResourceManager, resourceName: string,
                 filter: Record<string, string[]> = {}, sorting: string[] = ['id'],
@@ -37,12 +38,16 @@ export default class RSet {
         this.resourceName = resourceName;
         this._items = [];
         this.loading = false;
-        this.resMan.on('received-' + resourceName, this.refresh.bind(this));
-        this.resMan.on('deleted-' + resourceName, this.refresh.bind(this));
-        this.resMan.on('pager-unified', this.switchPager.bind(this));
+        this.eventIds = [];
+        this.eventIds.push(this.resMan.on('received-' + resourceName, this.refresh.bind(this)));
+        this.eventIds.push(this.resMan.on('deleted-' + resourceName, this.refresh.bind(this)));
+        this.eventIds.push(this.resMan.on('pager-unified', this.switchPager.bind(this)));
         this.evt = new NamedEventManager()
         this.on = this.evt.on.bind(this.evt);
         this.prevKeys = [];
+    }
+    dispose() {
+        this.eventIds.forEach(id => this.resMan.events.unbind(id));
     }
 
     switchPager(filter: string, pager: Pager) {
