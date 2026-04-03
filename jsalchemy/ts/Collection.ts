@@ -143,11 +143,11 @@ class Collection {
         const getPk = this.cls.getPk;
         const ret = [];
         for (let [filterKey, sort] of this.pagers.entries()) {
-            let toRemove = [];
-            let toAdd = [];
+            let toRemove: IResource[] = [];
+            let toAdd: IResource = [];
             let filterFunc = this.filterFuncs.get(filterKey);
-            for (let item of items) {
-                (filterFunc(item) ? toAdd : toRemove).push(item);
+            for (let [oldItem, partial] of items) {
+                (filterFunc(partial) ? toAdd : toRemove).push(oldItem);
             }
             if (toAdd.length) {
                 sort.totalCount += toAdd.length
@@ -158,15 +158,15 @@ class Collection {
             if (toRemove.length) {
                 // sort.totalCount -= toRemove.length
                 for (let pager of sort.pagers.values()) {
-                    pager.remove(toRemove)
+                    pager.remove(toRemove.map(getPk))
                 }
             }
         }
-        for (let item of items) {
-            let pk = getPk(item);
-            let oldItem = this.pkIndex.get(pk);
+        for (let [oldItem, partial] of items) {
+            let pk = getPk(partial);
+            // let oldItem = this.pkIndex.get(pk);
             if (oldItem) {
-                oldItem.$init(item)
+                oldItem.$init(partial)
                 ret.push(oldItem);
             }
         }
