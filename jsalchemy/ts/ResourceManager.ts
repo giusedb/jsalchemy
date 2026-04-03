@@ -1,6 +1,6 @@
 // resources.ts
 import _ from 'lodash';
-import {JSAlchemyConnection} from "../connection";
+import {JSAlchemyConnection} from "./Connection";
 import Collection from "./Collection";
 import Toucher from "./Toucher";
 import {FilterCacher} from "./Reducer";
