@@ -71,7 +71,7 @@ export interface IResourceIndex {
 export interface ISort {
     totalCount: number;
     isComplete: boolean;
-    pagers: Map<string, Pager>;
+    pagers: Map<string, IPager>;
 }
 
 export type FilterFunction = {
@@ -115,4 +115,35 @@ export type DataPayload = {
 export interface IGotDataOptions {
     dontCreate?: boolean;
     savedItems: IResource[]
+}
+
+export interface IPaging {
+    rpp: number;
+    page: number;
+    sort: string[];
+}
+
+export interface IQueryFilter {
+    filter: Record<string, any[]>;
+    paging: IPaging;
+}
+
+export interface IPager {
+    filterFor(nPage: number): IQueryFilter;
+    fetch(min: number, max: number): Promise<string[]>;
+    remove(pks: string[]): number;
+    add(items: IResource[]): void;
+    update(items: IResource[]): void;
+    hasInterval(min: number, max: number): boolean;
+    get(min: number, max: number, callBack?: Function): string[];
+    pushPage(nPage: number, result: IQueryResult): void;
+    get missingPages(): [number, Pager][]
+    totalCount: number;
+    isComplete: boolean;
+    sort: string[];
+    collection: Collection;
+    resMan: ResourceManager;
+    filter: Record<string, string[]>
+    filterKey: string;
+    rpp: number;
 }

@@ -1,7 +1,8 @@
 import Collection, {getFilterKey, getSortKey} from "./Collection";
-import {FilterFunction, IQueryResult, IResource, SortFunction} from "./interfaces";
+import {FilterFunction, IPager, IQueryFilter, IQueryResult, IResource, SortFunction} from "./interfaces";
 import {ResourceManager} from "./ResourceManager";
 import {indexBy, IUnplaced, makeFilter, makeSortFunction, sleep, sortedInsert} from "./utils";
+import {SimplePager} from "./SimplePager";
 
 interface IMinMax {
     min: number
@@ -17,7 +18,7 @@ export class Unplaced {
     }
 }
 
-export class Pager {
+export class Pager implements IPager{
     pages: Map<number, Array<string>>
     invalids: Set<number> = new Set()
     collection: Collection
@@ -50,7 +51,7 @@ export class Pager {
         this._sort = sort;
         this.filterKey = getFilterKey(this.filter);
         this.filterFunc = makeFilter(filter);
-        this.sortKey = getSortKey(this.sort);
+        this.sortKey = getSortKey(sort);
         this.sortFunc = makeSortFunction(sort);
         this.newBasket = []
         this.updateBasket = []
@@ -82,12 +83,6 @@ export class Pager {
      */
     placeUnplaced() {
         const getPk = this.collection.cls.getPk;
-        if (this.isComplete) {
-            this.page.push(
-                ...this.unplacedItems.splice(0, this.unplacedItems.length)
-                    .map(unplaced => getPk(unplaced.item)))
-        }
-
         const field = this.sort[0].replace('~', '');
 
         const unplaceds: Unplaced[] = [];
@@ -208,7 +203,7 @@ export class Pager {
         }
         this.placeUnplaced();
     }
-    filterFor(nPage: number) {
+    filterFor(nPage: number): IQueryFilter {
         return {
             filter: this.filter,
             paging: {
@@ -228,15 +223,6 @@ export class Pager {
         return this.get(min, max);
     }
     remove(pks: string[]): number {
-        if (this.isComplete) {
-            const toRemove = pks.map(x => this.page.indexOf(x))
-                .sort((x, y) => y - x)
-                .filter(x => x >= 0)
-            for (let key of toRemove) {
-                this.page.splice(key, 1);
-            }
-            return toRemove.length;
-        }
         let removed = 0
         for (let pk of pks) {
             for (let page of this.pages.values()) {
@@ -254,13 +240,7 @@ export class Pager {
      * @param items
      */
     add(items: IResource[]) {
-        // this.newBasket.push(...pks);
         // maybe sorted insert would be better
-        if (this.isComplete) {
-            this.page.push(...items.map(this.collection.cls.getPk))
-            this.reSort();
-            return;
-        }
         this.unplacedItems.push(...items.map(x => new Unplaced(x)))
     }
     update(items: IResource[]) {
@@ -271,7 +251,7 @@ export class Pager {
      * @param min
      * @param max
      */
-    hasInterval(min: number, max: number): Boolean {
+    hasInterval(min: number, max: number): boolean {
         return this.resolvePages(min, max).slice(0, 2).every(x => this.pages.has(x));
     }
     /**
@@ -280,18 +260,17 @@ export class Pager {
      * @param max
      */
     get(min: number, max: number, callBack: Function = null): string[] {
-        if (this.isComplete) {
-            return this.sorted.slice(min, max);
-        }
         if (this.checkCompleteness()) {
-            this.unify();
-            return this.sorted.slice(min, max);
+            return this.unify().get(min, max);
         }
         const waitForInterval = async (min: number, max: number) => {
-            while (!this.hasInterval(min, max)) {
-                await sleep(50)
+            let retry = 100;
+            while (retry && !this.hasInterval(min, max)) {
+                await sleep(50);
+                retry --;
             }
-            callBack(this.get(min, max));
+            if (retry)
+                callBack(this.get(min, max));
         }
         const [minPage, maxPage, offset] = this.resolvePages(min, max)
         min -= offset;
@@ -341,13 +320,12 @@ export class Pager {
         iSort.isComplete = true;
         for (let key of [...iSort.pagers.keys()])
             iSort.pagers.delete(key);
-        iSort.pagers.set('', this);
         const page = [];
         this.pages.values().forEach(array => page.push(...array));
-        this.page = page;
-        this.sort = this._sort;
-        this.reSort();
-        this.resMan.emit('pager-unified', this.filterKey, this);
+        const newPager = new SimplePager(this.collection, this.filter, this.sort, page)
+        iSort.pagers.set('', newPager);
+        this.resMan.emit('pager-unified', this.filterKey, newPager);
+        return newPager
     }
     checkCompleteness() {
         if (!this.pages.size)
