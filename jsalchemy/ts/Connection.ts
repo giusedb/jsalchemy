@@ -2,7 +2,7 @@ import {NamedEventManager} from './NamedEventManager';
 import {ResourceManager} from './ResourceManager';
 import storage from "./storage";
 
-import { xdr, kebabCase } from "./utils";
+import { xdr, kebabCase, cleanDescription } from "./utils";
 
 export class JSAlchemyWsConnection {
   private connection: any;
@@ -186,7 +186,7 @@ export class JSAlchemyConnection {
   updateStatus(status: any): void {
     const lastBuild = parseFloat(storage.get('lastBuild')) || 1;
     if (lastBuild < status.last_build) {
-      utils.cleanDescription();
+      cleanDescription();
       storage.set('lastBuild', status.last_build);
     }
     this.isConnected = Boolean(status.token);

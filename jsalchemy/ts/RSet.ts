@@ -117,6 +117,7 @@ export default class RSet {
             this._sortKey = key
             this._sort = sort
             this.pager = this.collection.getPager(this._filter, this._sort);
+            this.pager.sort = sort;
         }
         return this;
     }
