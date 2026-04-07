@@ -4,7 +4,7 @@ import Orm  from '../ts/Orm.js';
 const local = {recordSet: null};
 const iOrm = inject('orm');
 
-const emits = defineEmits(['loading', 'records', 'recordSet']);
+const emits = defineEmits(['loading', 'records', 'recordSet', 'update:page']);
 const props = defineProps({
   resource: String,
   filter: Object,
