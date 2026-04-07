@@ -13,6 +13,7 @@ interface IStorage {
   set(key: string, value: any): void;
   del(key: string): void;
   has(key: string): boolean;
+  keys(): string[];
 }
 
 // LocalStorage class (for browser)
@@ -56,6 +57,10 @@ class LocalStorage implements IStorage {
 
   has(key: string): boolean {
     return key in this.$storage;
+  }
+
+  keys(): string[] {
+      return Object.keys(this.$storage)
   }
 }
 
@@ -124,6 +129,10 @@ class FileStorage implements IStorage {
 
   has(key: string): boolean {
     return key in this.$storage;
+  }
+
+  keys(): string[] {
+      return Object.keys(this.$storage)
   }
 }
 

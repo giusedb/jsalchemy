@@ -1,5 +1,6 @@
 import {FilterFunction, IResource, SortFunction} from "./interfaces";
 import _ from "lodash";
+import Storage from "./storage";
 
 export interface IUnplaced {
     item: IResource,
@@ -165,4 +166,18 @@ export async function xdr(url: string, data: any, application: string, token: st
 export function kebabCase(str: string): string {
   let ret = str.replace(/[A-Z]([a-z]|[0-9])+/g, (x) => `-${x.toLowerCase()}`);
   return (ret.startsWith('-') ? ret.substring(1) : ret).toLowerCase();
+}
+export function cleanDescription(): void {
+    for (let key of Storage.keys()) {
+        if (key.startsWith('description:')) {
+            Storage.del(key)
+        }
+    }
+}
+export function indexMap(list: any[], indexer: Function ): Map<any, any> {
+    const ret = new Map();
+    for (let item of list) {
+        ret.set(indexer(item), item)
+    }
+    return ret;
 }

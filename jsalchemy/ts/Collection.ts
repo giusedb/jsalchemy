@@ -4,6 +4,7 @@ import utils from "../utils";
 import Toucher from "./Toucher";
 import {ResourceManager} from "./ResourceManager";
 import _ from "lodash";
+import {indexMap} from "./utils";
 
 export function getFilterKey(filter: Object) {
     return Object.keys(filter)
@@ -102,10 +103,10 @@ class Collection {
     }
     bulkInsert(items: IResource[], hydratePagers: boolean = false, options: IGotDataOptions): [IResource[], any[]] {
         const getKey = this.cls.getPk;
-        const idxPk = Object.fromEntries(items.map(x => [getKey(x), x]))
+        const idxPk: Map<string, IResource> = indexMap(items, getKey);
         const oldKeys = [];
         const newKeys = [];
-        for (const key in idxPk) {
+        for (const key of idxPk.keys()) {
             if (this.pkIndex.has(key)) {
                 oldKeys.push(key);
             } else {
@@ -120,9 +121,9 @@ class Collection {
             newItems = options.savedItems;
         }
         else
-            newItems = newKeys.map(k => new this.cls(idxPk[k], {}));
+            newItems = newKeys.map(k => new this.cls(idxPk.get(k), {}));
         const existingItems: [IResource, object][] = oldKeys.map(k => {
-            return [this.pkIndex.get(k), idxPk[k]]
+            return [this.pkIndex.get(k), idxPk.get(k)]
         })
         newItems.forEach(item => this.pkIndex.set(item.$pk, item))
         if (hydratePagers) {
@@ -210,7 +211,6 @@ class Collection {
         }
         return iSort.pagers.get(sortKey);
     }
-
     get allPagers(): Pager[] {
         const ret = [];
         for (let sort of this.pagers.values()) {
