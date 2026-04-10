@@ -171,8 +171,8 @@ export default class Orm {
                   {records: chunk.map(item => item.$raw)},
                   true, true
               )
-              const newKeys = result.new ? result.new[resourceName].map(cls.getPk) : [];
-              const updatedKeys = result.update ? result.update[resourceName].map(cls.getPk) : [];
+              const newKeys = result.new ? (result.new[resourceName] || []).map(cls.getPk) : [];
+              const updatedKeys = result.update ? (result.update[resourceName] || []).map(cls.getPk) : [];
               this.resources.gotData(result);
               let keys = [...updatedKeys, ...newKeys];
               if (keys.length) {

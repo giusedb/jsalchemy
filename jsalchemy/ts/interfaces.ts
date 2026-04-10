@@ -79,7 +79,7 @@ export type FilterFunction = {
 }
 
 export type SortFunction = {
-    (record: IResource, record: IResource): number
+    (rec: IResource, rec: IResource): number
 }
 
 export interface IQueryResult {
@@ -110,6 +110,7 @@ export type DataPayload = {
   update?: Record<string, any[]>;
   get?: Record<string, any[]>;
   m2m?: Record<string, any>;
+  read?: Record<string, any>;
   payload?: any;
 };
 

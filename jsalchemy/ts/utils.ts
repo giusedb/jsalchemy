@@ -99,10 +99,10 @@ export function arrayEqual(a1: string[], a2: string[]): boolean {
     }
     return true
 }
-export function range(_from: number = 0, to: number = 0) {
-    if (to === 0) {
+export function range(_from: number = 1, to: number = 0) {
+    if (to === 1) {
         to = _from
-        _from = 0;
+        _from = 1;
     }
     return Array.from({length: to - _from}, (_, i) => _from + i)
 }

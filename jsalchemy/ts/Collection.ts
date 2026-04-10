@@ -75,6 +75,7 @@ class Collection {
     touch: Toucher
     pagers: Map<string, ISort>
     filterFuncs: Map<string, FilterFunction>
+    filters: Map<string, Object>
     resMan: ResourceManager
 
     // missing
@@ -90,6 +91,7 @@ class Collection {
         this.touch = touch
         this.pagers = new Map();
         this.filterFuncs = new Map<string, FilterFunction>();
+        this.filters = new Map<string, Object>();
         this.missing = new Set()
         this.requested = new Set()
         this.resMan = resMan;
@@ -258,6 +260,7 @@ class Collection {
         if (!this.pagers.has(filterKey)) {
             this.pagers.set(filterKey, { totalCount: null, pagers: new Map(), isComplete: false });
             this.filterFuncs.set(filterKey, utils.makeFilter(filter))
+            this.filters.set(filterKey, filter);
         }
         const iSort = this.pagers.get(filterKey)
         if (iSort.isComplete) {
