@@ -6,7 +6,6 @@ import {arrayEqual, sleep} from "./utils";
 import {NamedEventManager} from "./NamedEventManager";
 
 export default class RSet {
-    pager: Pager
     collection: Collection
     resMan: ResourceManager
     resourceName: string
@@ -17,8 +16,10 @@ export default class RSet {
     protected _filterKey: string
     protected _sortKey: string
     protected _items: IResource[]
+    protected _pager: Pager
+    protected _isComplete: boolean
     protected prevKeys : string[];
-    isComplete: boolean;
+    protected waitForPager: Promise<Pager> = null
     loading: boolean
     evt: NamedEventManager
     on: Function
@@ -29,8 +30,7 @@ export default class RSet {
                 rpp: number=25, page: number=1) {
         this.resMan = resMan;
         this.collection = resMan.getCollection(resourceName);
-        this.pager = this.collection.getPager(filter, sorting);
-        this.isComplete = this.pager.isComplete;
+        this._pager = null;
         this._filter = filter;
         this._sort = sorting
         this._rpp = rpp;
@@ -52,46 +52,29 @@ export default class RSet {
 
     switchPager(filter: string, pager: Pager) {
         if (getFilterKey(this.filter) === filter) {
-            console.log('RSet switching pager ...')
-            this.pager = pager;
+            // console.log('RSet switching pager ...')
+            this._pager = pager;
+            this._isComplete = true;
         }
-        this.isComplete = true;
     }
     refresh(): IResource[] {
-        const waitForItem = async (pks) => {
-            let items = this.collection.get(...pks);
-            while (!items.every(Boolean)) {
-                await sleep(50);
-                items = this.collection.get(...pks);
-            }
-            this.push(items);
-        }
-        waitForItem.bind(this);
-        if (this.isComplete) {
-            this.pager.sort = this._sort;
-        }
-        const pks = this.pager.get(this.min, this.max, waitForItem);
-        if ((pks !== null) && (!arrayEqual(pks, this.prevKeys))) {
-            this.prevKeys = pks;
-            const items = this.collection.get(...pks)
-            if (items.every(Boolean)) {
-                this.push(items);
-            } else {
-                waitForItem(pks);
-            }
-        }
+        this.fetch();
         return this._items
     }
     async fetch(): Promise<IResource[]> {
+        // console.log('Rset.fetch()')
         this.evt.emit('loading', true);
-        while (!this.collection.cls) {
-            await sleep(50);
+        let pager = this.pager
+        if (this.waitForPager)
+            pager = await this.waitForPager
+        const pks = await pager.get(this.min, this.max + this.rpp);
+        if ((pks !== null) && (!arrayEqual(pks, this.prevKeys))) {
+            const items = await this.resMan.get(this.resourceName, pks)
+            if (items)
+                this.push(items.slice(0, this.rpp));
+            this.evt.emit('loading', false);
+            this.prevKeys = items.map(this.collection.cls.getPk);
         }
-        const pks = await this.pager.fetch(this.min, this.max + this.rpp);
-        const items = await this.resMan.get(this.resourceName, pks)
-        if (items)
-            this.push(items.slice(0, this.rpp));
-        this.evt.emit('loading', false);
         return this._items;
     }
     setPage(page: number) {
@@ -107,7 +90,7 @@ export default class RSet {
         if (this._filterKey !== key) {
             this._filterKey = key;
             this._filter = filter
-            this.pager = this.collection.getPager(filter, this._sort)
+            this._pager = null;
         }
         return this
     }
@@ -117,7 +100,6 @@ export default class RSet {
             this._sortKey = key
             this._sort = sort
             this.pager = this.collection.getPager(this._filter, this._sort);
-            this.pager.sort = sort;
         }
         return this;
     }
@@ -144,6 +126,8 @@ export default class RSet {
         return this.refresh();
     }
     get totalCount() {
+        if (!this.pager)
+            return 0;
         return this.pager.totalCount;
     }
     get page(): number {
@@ -175,5 +159,24 @@ export default class RSet {
     }
     get max () {
         return this._rpp * (this._page + 1)
+    }
+    get pager(): Pager | null {
+        if (this._pager)
+            return this._pager;
+        (async () => {
+            if (this.waitForPager) return;
+            this.waitForPager = this.collection.getPager(this.filter, this._sort)
+            this._pager = await this.waitForPager
+            this.waitForPager = null
+        })();
+        return null;
+    }
+    get isComplete(): boolean {
+        if (this._isComplete)
+            return this._isComplete
+        if (this._pager) {
+            return this._pager.isComplete;
+        }
+        return false;
     }
 }

@@ -30,29 +30,12 @@ export class SimplePager implements IPager {
         this.sortKey = getSortKey(sort);
         this.sortFunc = makeSortFunction(sort);
         this.rpp = this.collection.cls.rpp;
-        this.page = page;
+        this.sorted = page;
         this.reSort();
         this.requiredPages = [];
     }
-    get(min: number, max: number, callBack?: Function): string[] {
+    async get(min: number, max: number, callBack?: Function): Promise<string[]> {
         return this.sorted.slice(min, max);
-    }
-    filterFor(nPage: number): IQueryFilter {
-        return {
-            filter: this.filter,
-            paging: {
-                rpp: this.collection.cls.rpp,
-                page: nPage,
-                sort: this._sort
-            }
-        }
-    }
-    pushPage(nPage: number, result: IQueryResult) {
-        this.collection.pagers.get(this.filterKey).totalCount = result.totalCount
-        this.pages.set(nPage, result.pks)
-        const idx = this.waitingPages.indexOf(nPage);
-        if (idx > 0)
-            this.waitingPages.splice(idx, 1);
     }
     private reSort() {
         const pkIdx = this.collection.pkIndex
@@ -77,10 +60,6 @@ export class SimplePager implements IPager {
 
     hasInterval(min: number, max: number): boolean {
         return true;
-    }
-
-    get missingPages(): [number, Pager][] {
-        return [];
     }
 
     remove(pks: string[]): number {

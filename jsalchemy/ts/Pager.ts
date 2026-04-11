@@ -1,7 +1,7 @@
 import Collection, {getFilterKey, getSortKey} from "./Collection";
 import {FilterFunction, IPager, IQueryFilter, IQueryResult, IResource, SortFunction} from "./interfaces";
 import {ResourceManager} from "./ResourceManager";
-import {indexBy, IUnplaced, makeFilter, makeSortFunction, sleep, sortedInsert} from "./utils";
+import {makeFilter, makeSortFunction} from "./utils";
 import {SimplePager} from "./SimplePager";
 
 interface IMinMax {
@@ -32,15 +32,13 @@ export class Pager implements IPager{
     newBasket: string[]
     removeBasket: string[]
     updateBasket: IResource[]
-    requiredPages: [number, Pager][];
-    waitingPages: number[];
-    minMaxItems: Map<number, IMinMax>
     rpp: number;
     _isComplete: boolean;
-    page: Array<string>;
-    sorted: Array<string>;
 
-    unplacedItems: Unplaced[]
+    unplacedItems: Unplaced[];
+    waitPage: Promise<any>;
+    loading: Promise<any>;
+    // fetcher: DeferredPageFetcher;
 
     constructor(collection: Collection, filter: Record<string, string[]>, sort: string[]) {
         this.pages = new Map()
@@ -57,10 +55,15 @@ export class Pager implements IPager{
         this.updateBasket = []
         this.removeBasket = []
         this.unplacedItems = [];
-        this.requiredPages = [];
-        this.waitingPages = [];
-        this.minMaxItems = new Map()
-        this.rpp = this.collection.cls.rpp;
+        if (this.collection.loading) {
+            this.loading = (async () => {
+                await this.collection.loading;
+                this.rpp = this.collection.cls.rpp;
+                this.loading = null;
+            })();
+        } else {
+            this.rpp = this.collection.cls.rpp;
+        }
     }
     resolvePages(min: number, max: number): [number, number, number] {
         if (this.newBasket.length + this.removeBasket.length + this.updateBasket.length)
@@ -203,29 +206,20 @@ export class Pager implements IPager{
         }
         this.placeUnplaced();
     }
-    filterFor(nPage: number): IQueryFilter {
-        return {
-            filter: this.filter,
-            paging: {
-                rpp: this.collection.cls.rpp,
-                page: nPage,
-                sort: this.sort
-            }
-        }
-    }
     async fetch(min: number, max: number): Promise<string[]> {
         const [minPage, maxPage, offset] = this.resolvePages(min, max)
         for (let page of [minPage, maxPage]) {
             if (this.pages.has(page))
                 continue
-            this.pushPage(page, await this.resMan.verb(this.collection.cls.name, 'query', this.filterFor(maxPage)));
+            let queryFilter = this.collection.queryArgs(this.filter, this.sort, page);
+            this.pushPage(page, await this.collection.deferreQuery.fetch(queryFilter))
         }
         return this.get(min, max);
     }
     remove(pks: string[]): number {
         let removed = 0
         for (let pk of pks) {
-            for (let page of this.pages.values()) {
+            for (let page of [...this.pages.values()]) {
                 let idx = page.indexOf(pk)
                 if (idx >= 0)  {
                     page.splice(idx, 1)
@@ -254,57 +248,51 @@ export class Pager implements IPager{
     hasInterval(min: number, max: number): boolean {
         return this.resolvePages(min, max).slice(0, 2).every(x => this.pages.has(x));
     }
+    async getPage(n: number): Promise<string[]> {
+        if (this.pages.has(n)) {
+            return this.pages.get(n)
+        }
+        if (this.waitPage) {
+            await this.waitPage;
+            return this.getPage(n);
+        } else {
+            this.waitPage = this.collection.deferreQuery.fetch(
+                this.collection.queryArgs(this.filter, this.sort, n));
+            const result = await this.waitPage;
+            this.collection.pagers.get(this.filterKey).totalCount = result.totalCount
+            this.pages.set(n, result.pks);
+            this.waitPage = null;
+        }
+        return this.pages.get(n);
+    }
     /**
      * Returns the primary keys array from `min` to `max` according to the `sort` order
      * @param min
      * @param max
      */
-    get(min: number, max: number, callBack: Function = null): string[] {
+    async get(min: number, max: number, callBack: Function = null): Promise<string[]> {
         if (this.checkCompleteness()) {
-            return this.unify().get(min, max);
+            return await this.unify().get(min, max);
         }
-        const waitForInterval = async (min: number, max: number) => {
-            let retry = 100;
-            while (retry && !this.hasInterval(min, max)) {
-                await sleep(50);
-                retry --;
-            }
-            if (retry)
-                callBack(this.get(min, max));
-        }
+        if (this.loading)
+            await this.loading;
         const [minPage, maxPage, offset] = this.resolvePages(min, max)
         min -= offset;
         max -= offset;
         if (minPage === maxPage) {
             if (!this.pages.has(minPage)) {
-                this.require(min, max);
-                if (callBack)
-                    waitForInterval(min, max);
-                return null
+                await this.getPage(minPage);
             }
             return this.pages.get(minPage).slice(min % this.rpp, max % this.rpp)
         } else {
             if (![minPage, maxPage].every(x => this.pages.has(x))) {
-                this.require(min, max);
-                if (callBack) {
-                    waitForInterval(min, max);
-                }
-                return null;
+                await this.getPage(minPage);
+                await this.getPage(maxPage);
             }
             return [
                 ...this.pages.get(minPage).slice(min % this.rpp, this.rpp),
                 ...this.pages.get(maxPage).slice(0, max % this.rpp)
             ]
-        }
-
-    }
-    require(min: number, max: number) {
-        let pages = this.resolvePages(min, max);
-        for (let page of pages.slice(0, 2)) {
-            if (!this.requiredPages.map(x => x[0]).includes(page) && !this.waitingPages.includes(page)) {
-                this.requiredPages.push([page, this])
-                this.collection.touch.touch();
-            }
         }
     }
     pushPage(nPage: number, result: IQueryResult) {
@@ -321,7 +309,7 @@ export class Pager implements IPager{
         for (let key of [...iSort.pagers.keys()])
             iSort.pagers.delete(key);
         const page = [];
-        this.pages.values().forEach(array => page.push(...array));
+        [...this.pages.values()].forEach(array => page.push(...array));
         const newPager = new SimplePager(this.collection, this.filter, this.sort, page)
         iSort.pagers.set('', newPager);
         this.resMan.emit('pager-unified', this.filterKey, newPager);
@@ -332,11 +320,10 @@ export class Pager implements IPager{
             return false
         if (this.pages.size < Math.floor((this.totalCount / this.rpp) + 1))
             return false
-        if (this.pages.values().map(x => x.length).reduce((x, y) => x + y) != this.totalCount)
+        const values = [...this.pages.values()];
+        if (values.map(x => x.length).reduce((x, y) => x + y) != this.totalCount)
             return false
-        return this.pages.values()
-            .every(page => page.every(pk => this.collection.pkIndex.has(pk)))
-
+        return values.every(page => page.every(pk => this.collection.pkIndex.has(pk)))
     }
     private reSort() {
         const pkIdx = this.collection.pkIndex
@@ -358,11 +345,6 @@ export class Pager implements IPager{
         this._isComplete = this.collection.pagers.get(this.filterKey).isComplete
         return this._isComplete
     }
-    // get sorted() {
-    //     const pkIdx = this.collection.pkIndex
-    //     const srt = (x, y) => this.sortFunc(pkIdx.get(x), pkIdx.get(y))
-    //     return this.page.sort(srt);
-    // }
     set sort(sort: Array<string>) {
         const key = getSortKey(sort);
         if (this.sortKey !== key) {

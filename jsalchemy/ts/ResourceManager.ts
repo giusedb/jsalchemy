@@ -89,36 +89,11 @@ export class ResourceManager {
 
     this.filterCacher = new FilterCacher(this);
     this.autoLinker = new Autolinker(this);
-    this.autoLinker.start(50);
+    // this.autoLinker.start(50);
   }
 
   async delete(modelName: string, pks: any): Promise<void> {
     await this.verb(modelName, 'delete', { pks });
-  }
-
-  async list(modelName: string, filter: Filter, together?: any): Promise<any[]> {
-    // fetching asynchronous model from server
-    const reducedFilter = this.filterCacher.reduce(modelName, filter);
-
-    if (this.connection.status.wsConnection) {
-      // if something is missing on my local DB
-      if (reducedFilter) {
-        // ask for missings and parse server response in order to enrich my local DB.
-        // placing lock for this model
-        const data = await this.connection.fetch(modelName, 'list', { filter: reducedFilter });
-        await this.gotData(data);
-        return data;
-      } else {
-        return [];
-      }
-    } else {
-      const data = await this.connection.fetch(modelName, 'list', reducedFilter);
-      await this.gotData(data);
-      if (!filter) {
-        this.gotAll.add(modelName);
-      }
-      return data;
-    }
   }
 
   async verb(
@@ -164,27 +139,17 @@ export class ResourceManager {
     // const model = await this.describe(modelName);
     return new RSet(this, modelName, filter);
   }
-  async get(resourceName: string, pks: string[] | string): Promise<any> {
+  async get(resourceName: string, pks: string[] | string): Promise<IResource[] | IResource> {
+    // console.log(`ResourceManager.get(${resourceName}, ${pks})`)
     const model = await this.describe(resourceName);
-    let filter: Filter = {};
     let keys: string[];
     if (Array.isArray(pks)) {
         keys = pks
     } else {
         keys = [pks]
     }
-    const collection = this.getCollection(resourceName);
-    while (collection.missing.size > 0)
-        await sleep(50);
-    const missing = Array.from(
-        new Set(keys)
-            .difference(collection.requested)
-            .difference(new Set(collection.pkIndex.keys())))
-    if (missing.length > 0) {
-      await this.verb(resourceName, 'get', { pks: missing });
-    }
-    
-    const ret = collection.get(...keys);
+    const collection = await this.getAsyncCollection(resourceName);
+    const ret = await collection.get(...keys);
     if (Array.isArray(pks))
       return ret
     return ret[0]
@@ -315,7 +280,7 @@ export class ResourceManager {
     const modelName = definition.name;
     // localStorage['description:' + modelName] = JSON.stringify(definition);
     let resourceClass: IResourceClass
-    resourceClass = makeResourceClass(this.orm, this, definition);
+    resourceClass = makeResourceClass(this.orm, this, definition, this.reactive);
     this.classCache[modelName] = resourceClass;
     
     if (!(modelName in this.collections)) {
@@ -331,7 +296,7 @@ export class ResourceManager {
   gotM2M(data: any): void {
     // Implementation would go here
   }
-  describe(modelName: string): Promise<any> {
+  describe(modelName: string): Promise<IResourceClass> {
     if (modelName in this.descriptionWaiting) {
       return this.descriptionWaiting[modelName];
     }
@@ -341,7 +306,6 @@ export class ResourceManager {
         if (this.failedModels.has(modelName)) {
           throw new Error(`model ${modelName} not found`);
         }
-        
         const cacheKey = 'description:' + modelName;
         if (cacheKey in localStorage) {
           this.gotModel(JSON.parse(localStorage[cacheKey]));
@@ -358,10 +322,10 @@ export class ResourceManager {
         
         return this.classCache[modelName];
       }
-      
+
       return this.classCache[modelName];
     };
-    
+
     return this.descriptionWaiting[modelName] = call();
   }
   addModelHandler(modelName: string, decorator: Function): void {
@@ -384,13 +348,20 @@ export class ResourceManager {
   }
   getCollection(resourceName: string): Collection {
     if (!(resourceName in this.collections)) {
-      this.describe(resourceName).then((cls: any) => {
+      const promise = this.describe(resourceName).then((cls: any) => {
         this.collections[resourceName].cls = cls;
+        this.collections[resourceName].loading = null;
       });
-      
-      this.collections[resourceName] = new Collection(this, this.touch, null);
+      this.collections[resourceName] = new Collection(this, this.touch, null, promise);
     }
     
+    return this.collections[resourceName];
+  }
+  async getAsyncCollection(resourceName: string): Promise<Collection> {
+    if (!(resourceName in this.collections)) {
+      const cls = await this.describe(resourceName);
+      this.collections[resourceName] = new Collection(this, this.touch, cls);
+    }
     return this.collections[resourceName];
   }
 }

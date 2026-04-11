@@ -76,7 +76,7 @@ const TYPE_BACK_CONVERTERS = {
  * @param model {Object} - the Object as per server sent
  * @returns {*}
  */
-export function makeResourceClass(orm, resMan, model) {
+export function makeResourceClass(orm, resMan, model, reactive) {
   const noop = (val) => val;
 
   let getPk = null;
@@ -192,11 +192,18 @@ export function makeResourceClass(orm, resMan, model) {
           Object.defineProperty(Klass.prototype, ref.attribute, {
               get() {
                   const collection = resMan.getCollection(ref.resource)
-                  if (ref.is_pk) {
-                      let ret = collection.get(this[ref.local_attribute])
-                      return ret && ret[0];
-                  }
-                  throw new Error('Non PK reference are not implemented yet')
+                  const ret = collection.pkIndex.get(this[ref.local_attribute]);
+                  if (ret)
+                      return ret;
+                  const cacheKey = `__cache_${ref.attribute}`;
+                  if (cacheKey in this)
+                      return this[cacheKey];
+                  const state = reactive(null);
+                  this[cacheKey] = state;
+                  (async () => {
+                      state.value = await resMan.get(ref.resource, this[ref.local_attribute])
+                  })();
+                  return state;
               }
           });
           Klass.prototype[_.camelCase('get ' + ref.attribute)] = async function () {
@@ -212,6 +219,7 @@ export function makeResourceClass(orm, resMan, model) {
       } else {
           Object.defineProperty(Klass.prototype, ref.attribute, {
               get() {
+                  const state = reactive({});
                   if (!(ref.local_attribute in this.$rs)) {
                       const filter = {};
                       filter[ref.foreign_attribute] = this[ref.local_attribute];

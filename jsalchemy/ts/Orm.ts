@@ -11,6 +11,7 @@ import RSet from "./RSet";
 interface OrmOptions {
   endpoint?: string;
   autologin?: boolean;
+  reactive: Function;
 }
 
 interface EventHandlers {
@@ -47,10 +48,8 @@ export default class Orm {
   on: (event: string, handler: Function) => void;
   emit: (event: string, ...anything: any) => void;
 
-  constructor(options: OrmOptions, eventHandlers: EventHandlers = {}, reactive: Function) {
+  constructor(options: OrmOptions, eventHandlers: EventHandlers = {}) {
     Object.assign(this, options);
-    if (reactive)
-        options.reactive = reactive
     this.$events = new NamedEventManager();
 
     // Bind event handling methods
@@ -76,7 +75,6 @@ export default class Orm {
     this.get = this.resources.get.bind(this.resources);
     this.getModel = this.resources.describe.bind(this.resources);
     this.collections = this.resources.collections;
-    this.reactive = reactive;
   }
 
   /**

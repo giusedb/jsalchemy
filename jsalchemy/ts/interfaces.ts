@@ -95,6 +95,7 @@ export interface IOrmOptions {
     endpoint: string,
     autologin: boolean,
     keepSession: number,
+    reactive: Function
     ws?: {
         host: string,
         port: number,
@@ -126,18 +127,15 @@ export interface IPaging {
 export interface IQueryFilter {
     filter: Record<string, any[]>;
     paging: IPaging;
-}
+}Ø
 
 export interface IPager {
-    filterFor(nPage: number): IQueryFilter;
     fetch(min: number, max: number): Promise<string[]>;
     remove(pks: string[]): number;
     add(items: IResource[]): void;
     update(items: IResource[]): void;
     hasInterval(min: number, max: number): boolean;
-    get(min: number, max: number, callBack?: Function): string[];
-    pushPage(nPage: number, result: IQueryResult): void;
-    get missingPages(): [number, Pager][]
+    get(min: number, max: number, callBack?: Function): Promise<string[]>;
     totalCount: number;
     isComplete: boolean;
     sort: string[];

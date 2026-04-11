@@ -1,5 +1,10 @@
 <script setup>
 import Orm  from '../ts/Orm.js';
+import DeferredFetcher from '../ts/DeferredFetcher.ts';
+
+window.fetcher = new DeferredFetcher(async (pks) => {
+    return await iOrm.resources.get('Todo', pks)
+}, 100)
 
 const local = {recordSet: null};
 const iOrm = inject('orm');
