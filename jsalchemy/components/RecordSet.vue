@@ -1,5 +1,6 @@
 <script setup>
 import Orm  from '../ts/Orm.js';
+import DeferredFetcher from '../ts/DeferredFetcher.ts';
 
 const local = {recordSet: null};
 const iOrm = inject('orm');
@@ -35,8 +36,11 @@ const initRset = async () => {
     local.rset.setRpp(props.recordsPerPage)
   state.records = local.rset.items;
   local.rset.on('records', (recs, totalCount) => {
-    records.value = recs
+    records.value = recs;
     total.value = totalCount;
+  });
+  orm.value.on('got-data', () => {
+    local.rset.refresh();
   });
   local.rset.on('loading', (value) => {
     state.loading = value
@@ -58,7 +62,8 @@ onMounted(async () => {
 onUnmounted(() => {
   if (local.rset) {
     console.log('Disposing RSet')
-    local.rset.dispose();
+    if (local.rset)
+      local.rset.dispose();
   }
 })
 watch(() => props.page, (newVal, oldVal) => {
@@ -75,8 +80,10 @@ watch(() => props.recordsPerPage, (newVal, oldVal) => {
 });
 watch(() => props.filter, (newVal, oldVal) => {
   if (JSON.stringify(newVal) !== JSON.stringify(oldVal)) {
-    local.rset.dispose();
-    initRset(props);
+    if (local.rset) {
+      local.rset.dispose();
+      initRset(props);
+    }
   }
 });
 watch(() => props.sort, (newVal, oldVal) => {

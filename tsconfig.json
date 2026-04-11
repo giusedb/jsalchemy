@@ -5,8 +5,8 @@
     "lib": [
       "ES7",
       "ES6",
-//      "ES2015.Generator",
-//      "ES2015.Iterable",
+      "ES2015.Generator",
+      "ES2015.Iterable",
       "DOM",
       "ESNext",
       "ESNext.AsyncIterable",

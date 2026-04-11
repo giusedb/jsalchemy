@@ -4,14 +4,9 @@
 import {NamedEventManager} from "./NamedEventManager";
 import {ResourceManager} from "./ResourceManager";
 import {JSAlchemyConnection} from "../connection";
-import {ICollections, IResource, IResourceClass} from "./interfaces";
+import {ICollections, IOrmOptions, IResource, IResourceClass} from "./interfaces";
 import {groupBy, indexBy} from "./utils";
 import RSet from "./RSet";
-
-interface OrmOptions {
-  endpoint?: string;
-  autologin?: boolean;
-}
 
 interface EventHandlers {
   [key: string]: (...args: any[]) => void;
@@ -46,11 +41,12 @@ export default class Orm {
   collections: ICollections
   on: (event: string, handler: Function) => void;
   emit: (event: string, ...anything: any) => void;
+  options: IOrmOptions
 
-  constructor(options: OrmOptions, eventHandlers: EventHandlers = {}, reactive: Function) {
+  constructor(options: IOrmOptions, eventHandlers: EventHandlers = {}) {
     Object.assign(this, options);
-    if (reactive)
-        options.reactive = reactive
+    this.options = options;
+
     this.$events = new NamedEventManager();
 
     // Bind event handling methods
@@ -76,7 +72,6 @@ export default class Orm {
     this.get = this.resources.get.bind(this.resources);
     this.getModel = this.resources.describe.bind(this.resources);
     this.collections = this.resources.collections;
-    this.reactive = reactive;
   }
 
   /**
@@ -180,8 +175,10 @@ export default class Orm {
               const updatedKeys = result.update ? result.update[resourceName].map(cls.getPk) : [];
               this.resources.gotData(result);
               let keys = [...updatedKeys, ...newKeys];
-              if (keys.length)
-                  results.push(...this.resources.collections[resourceName].get(...keys))
+              if (keys.length) {
+                  const items = await this.resources.collections[resourceName].get(...keys);
+                  results.push(...items)
+              }
           }
       }
       return results;

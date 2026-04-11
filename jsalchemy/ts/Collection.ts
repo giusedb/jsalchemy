@@ -1,10 +1,22 @@
-import {FilterFunction, IGotDataOptions, IResource, IResourceClass, IResourceDef, ISort} from "./interfaces";
+import {
+    FilterFunction,
+    IGotDataOptions, IPager,
+    IQueryFilter, IQueryResult,
+    IResource,
+    IResourceClass,
+    IResourceDef,
+    ISort
+} from "./interfaces";
 import {Pager} from "./Pager";
 import utils from "../utils";
 import Toucher from "./Toucher";
 import {ResourceManager} from "./ResourceManager";
 import _ from "lodash";
 import {indexMap} from "./utils";
+import DeferredFetcher from "./DeferredFetcher";
+import {SimplePager} from "./SimplePager";
+
+const MAX_PAGER_LENGTH = 50;
 
 export function getFilterKey(filter: Object) {
     return Object.keys(filter)
@@ -16,9 +28,50 @@ export function getSortKey(sort: Array<string>) {
     return sort.join(':');
 }
 
+interface IPendingQuery {
+    resolve: (value: T[]) => void;
+    reject: (reason?: any) => void;
+    query: IQueryFilter;
+}
+
+class DeferredQueryFetcher {
+    private queue: IPendingQuery[] = [];
+
+    constructor(private readonly resMan: ResourceManager,
+                private readonly collection: Collection,
+                private readonly interval: number = 50) {
+        setInterval(this.processQueue.bind(this), this.interval);
+    }
+
+    public fetch(query: IQueryFilter): Promise<IQueryResult> {
+        return new Promise((resolve, reject) => {
+            this.queue.push({ resolve, reject, query})
+        })
+    }
+
+    private async processQueue() {
+        const currentQueue = [...this.queue];
+        this.queue = [];
+
+        if (currentQueue.length === 0) return;
+
+        if (currentQueue.length === 1) {
+            const result = await this.resMan.verb(this.collection.cls.name, 'query',
+                currentQueue[0].query, true);
+            currentQueue[0].resolve(result);
+        } else {
+            const result = await this.resMan.verb(this.collection.cls.name, 'query',
+                {multiple: currentQueue.map(req => req.query)}, true)
+            for (let i = 0; i < result.length; i++) {
+                currentQueue[i].resolve(result[i]);
+            }
+        }
+    }
+}
+
 class Collection {
     pkIndex: Map<string, IResource>
-    _cls: IResourceClass
+    cls: IResourceClass
     touch: Toucher
     pagers: Map<string, ISort>
     filterFuncs: Map<string, FilterFunction>
@@ -27,24 +80,26 @@ class Collection {
     // missing
     missing: Set<string>
     requested: Set<string>
+    loading: Promise<any>
+    fetcher: DeferredFetcher<IResource>
+    deferreQuery: DeferredQueryFetcher;
 
-    constructor(resMan: ResourceManager, touch: Toucher, cls: IResourceClass) {
+    constructor(resMan: ResourceManager, touch: Toucher, cls: IResourceClass, loading: Promise<any>) {
         this.pkIndex = new Map()
-        this._cls = cls
+        this.cls = cls
         this.touch = touch
         this.pagers = new Map();
         this.filterFuncs = new Map<string, FilterFunction>();
         this.missing = new Set()
         this.requested = new Set()
         this.resMan = resMan;
-    }
-
-    get cls(): IResourceClass {
-        return this._cls;
-    }
-
-    set cls(val: IResourceClass) {
-        this._cls = val
+        this.loading = loading;
+        this.fetcher = new DeferredFetcher(async (pks: string[]) => {
+            await this.resMan.verb(this.cls.name, 'get', { pks });
+            pks.forEach(x => this.requested.add(x));
+            return pks.map(pk => this.pkIndex.get(pk));
+        }, 50, '$pk');
+        this.deferreQuery = new DeferredQueryFetcher(resMan, this);
     }
 
     add(item: IResource) {
@@ -88,16 +143,14 @@ class Collection {
         }
         return ret;
     }
-    get(...keys: string[]): IResource[] {
+    async get(...keys: string[]): Promise<IResource[]> {
+        // console.log(`Collection.getAsync(${keys})`)
         const keySet = new Set(keys);
-        const missing = keySet.difference(new Set(this.pkIndex.keys()).union(this.requested));
+        const missing = keySet.difference(new Set(this.pkIndex.keys()));
         missing.forEach(x => this.requested.add(x))
         if (missing.size) {
-            for (let item of missing) {
-                this.requested.add(item);
-                this.missing.add(item);
-            }
-            this.touch.touch();
+            const fetched = await this.fetcher.fetch(Array.from(missing));
+            // console.log('Fetched', fetched);
         }
         return keys.map(x => this.pkIndex.get(x))
     }
@@ -130,25 +183,37 @@ class Collection {
             for (let [filterKey, sort] of this.pagers.entries()) {
                 let filtered = newItems.filter(this.filterFuncs.get(filterKey));
                 if (filtered.length) {
-                    sort.totalCount += filtered.length;
+                   sort.totalCount += filtered.length;
                     for (let pager of sort.pagers.values()) {
                         pager.add(filtered);
                     }
                 }
             }
         }
-        this.bulkUpdate(existingItems);
+        if (existingItems.length)
+            this.bulkUpdate(existingItems);
         return [newItems, existingItems]
     }
     bulkUpdate(items: [IResource, object][]): IResource[] {
         const getPk = this.cls.getPk;
         const ret = [];
+        const oItems = items.map(([newStatus, oldStatus]) => {
+            const pk = getPk(newStatus);
+            let oldItem = this.pkIndex.get(pk);
+            if (oldItem) {
+                oldItem.$init(newStatus)
+                ret.push(oldItem);
+            } else {
+                oldItem = new this.cls({newStatus});
+            }
+            return [oldItem, oldStatus];
+        })
         for (let [filterKey, sort] of this.pagers.entries()) {
             let toRemove: IResource[] = [];
             let toAdd: IResource = [];
             let filterFunc = this.filterFuncs.get(filterKey);
-            for (let [oldItem, partial] of items) {
-                (filterFunc(partial) ? toAdd : toRemove).push(oldItem);
+            for (let [oldItem, partial] of oItems) {
+                (filterFunc(partial) ? toRemove : toAdd).push(oldItem);
             }
             if (toAdd.length) {
                 sort.totalCount += toAdd.length
@@ -157,18 +222,10 @@ class Collection {
                 }
             }
             if (toRemove.length) {
-                // sort.totalCount -= toRemove.length
+                sort.totalCount -= toRemove.length
                 for (let pager of sort.pagers.values()) {
                     pager.remove(toRemove.map(getPk))
                 }
-            }
-        }
-        for (let [oldItem, partial] of items) {
-            let pk = getPk(partial);
-            // let oldItem = this.pkIndex.get(pk);
-            if (oldItem) {
-                oldItem.$init(partial)
-                ret.push(oldItem);
             }
         }
         return ret
@@ -195,7 +252,7 @@ class Collection {
         }
         return ret
     }
-    getPager(filter: Record<string, string[]>, sort: Array<string> = ['~id']): Pager {
+    async getPager(filter: Record<string, string[]>, sort: Array<string> = ['~id']): Promise<IPager> {
         const filterKey = getFilterKey(filter)
         const sortKey = getSortKey(sort)
         if (!this.pagers.has(filterKey)) {
@@ -207,18 +264,33 @@ class Collection {
             return iSort.pagers.get('');
         }
         if (!iSort.pagers.has(sortKey)) {
-            iSort.pagers.set(sortKey, new Pager(this, filter, sort));
+            let pager: IPager;
+            if (!this.cls)
+                await this.loading
+            const queryResult = await this.deferreQuery.fetch(this.queryArgs(filter, sort, 0));
+            if (queryResult.totalCount < Math.max(this.cls.rpp, MAX_PAGER_LENGTH)) {
+                if (queryResult.pks.length) {
+                    await this.get(...queryResult.pks);
+                }
+                pager = new SimplePager(this, filter, sort, queryResult.pks);
+            } else {
+                pager = new Pager(this, filter, sort)
+                pager.pages.set(0, queryResult.pks);
+            }
+            iSort.pagers.set(sortKey, pager)
+            iSort.totalCount = queryResult.totalCount;
         }
         return iSort.pagers.get(sortKey);
     }
-    get allPagers(): Pager[] {
-        const ret = [];
-        for (let sort of this.pagers.values()) {
-            for (let p of sort.pagers.values()) {
-                ret.push(p);
+    queryArgs(filter: any, sort: string[], nPage: number): IQueryFilter {
+        return {
+            filter,
+            paging: {
+                rpp: this.cls.rpp,
+                page: nPage,
+                sort: sort
             }
         }
-        return ret;
     }
 }
 

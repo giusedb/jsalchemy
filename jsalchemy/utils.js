@@ -256,6 +256,7 @@ export default {
         return this.equalArray(A, B);
       if (A.constructor === Set)
         return A.symmetricDifference(B).size === 0;
+      return false;
     },
     equalDict(source, target, keys) {
       if (source === target)
