@@ -206,7 +206,8 @@ class Collection {
                 oldItem.$init(newStatus)
                 ret.push(oldItem);
             } else {
-                oldItem = new this.cls({newStatus});
+                oldItem = new this.cls(newStatus);
+                this.pkIndex.set(pk, oldItem);
             }
             return [oldItem, oldStatus];
         })

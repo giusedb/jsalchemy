@@ -184,7 +184,8 @@ export class Pager implements IPager{
                     x => x >= (numPage * this.rpp) && x < ((numPage + 1) * this.rpp))
             ).length;
             if ((page.length > size) && (this.pages.has(numPage + 1))) {
-                this.pages.get(numPage + 1).unshift(...page.splice(size));
+                let nextPage = this.pages.get(numPage + 1);
+                this.pages.get(numPage + 1).unshift(...page.splice(size).filter(x => !nextPage.includes(x)));
             }
             if ((page.length < size) && (this.pages.has(numPage + 1))) {
                 page.push(...this.pages.get(numPage + 1).splice(0, size - page.length));
