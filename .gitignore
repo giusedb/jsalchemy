@@ -3,3 +3,4 @@ package-lock.json
 AGENTS.md
 .DS_Store
 reconnect.sh
+.aider.*

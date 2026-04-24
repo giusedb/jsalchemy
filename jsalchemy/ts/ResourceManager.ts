@@ -200,7 +200,8 @@ export class ResourceManager {
     }
 
     [[data.new || [], true], [data.read || [], false]].forEach(([items, hydratePagers]) => {
-      Object.entries(items).forEach(([resourceName, rawData]: any) => {
+      Object.entries(items).forEach(async ([resourceName, rawData]: any) => {
+        await this.describe(resourceName);
         const collection = this.getCollection(resourceName);
         if (!collection) return;
 
