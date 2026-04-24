@@ -177,10 +177,18 @@ class Collection {
         }
         else
             newItems = newKeys.map(k => new this.cls(idxPk.get(k), {}));
-        const existingItems: [IResource, object][] = oldKeys.map(k => {
-            return [this.pkIndex.get(k), idxPk.get(k)]
+        let existingItems: [IResource, object][] = oldKeys.map(k => {
+            const oldItem = this.pkIndex.get(k);
+            const newItem = idxPk.get(k);
+            const diff = Object.fromEntries(
+                Object.entries(oldItem.$row)
+                    .filter(([k, v]) => v !== newItem[k]));
+            return [oldItem, diff]
         })
+        const existingPks = new Set(existingItems.map(([i]) => i.$pk));
         newItems.forEach(item => this.pkIndex.set(item.$pk, item))
+        newItems = newItems.filter(item => !existingPks.has(item.$pk));
+        existingItems = existingItems.filter(([_, diff]) => Object.keys(diff).length);
         if (hydratePagers) {
             for (let [filterKey, sort] of this.pagers.entries()) {
                 let filtered = newItems.filter(this.filterFuncs.get(filterKey));
@@ -192,8 +200,16 @@ class Collection {
                 }
             }
         }
-        if (existingItems.length)
-            this.bulkUpdate(existingItems);
+        if (existingItems.length) {
+            this.bulkUpdate(
+                existingItems.map(item => [item[0],
+                    Object.fromEntries(
+                        Object.entries(
+                            utils.diffDict(...item))
+                            .filter(x => !x[0].startsWith('$'))
+                    )]));
+        }
+
         return [newItems, existingItems]
     }
     bulkUpdate(items: [IResource, object][]): IResource[] {
