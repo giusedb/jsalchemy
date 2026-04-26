@@ -168,42 +168,43 @@ export class ResourceManager {
     }
     
     if (data.delete) {
-      Object.entries(data.delete).forEach(([resourceName, rawData]: any) => {
+      for (const [resourceName, rawData] of Object.entries(data.delete)) {
         const collection = this.getCollection(resourceName);
-        if (!collection) return;
-        
+        if (!collection) continue;
+
         const deleted = collection.delete(...rawData);
-        
+
         if (deleted.length) {
           this.emit('deleted-' + resourceName, deleted);
         }
-        
+
         this.emit('deleted-' + resourceName + '-pk', new Set(rawData));
-      });
+      }
     }
     
     if (data.update) {
-      Object.entries(data.update).forEach(([resourceName, rawData]: any) => {
+      for (const [resourceName, rawData] of Object.entries(data.update)) {
         if (!(resourceName in this.collections)) {
-          return;
+          continue;
         }
-        
+        await this.describe(resourceName);
+
         const collection = this.getCollection(resourceName);
-        if (!collection) return;
+        if (!collection) continue;
         let getPk = collection.cls.getPk;
         if (rawData.length) {
           collection.bulkUpdate(rawData);
           this.emit(`updated-${resourceName}`, rawData);
           this.emit(`received-${resourceName}`);
         }
-      });
+      }
     }
 
-    [[data.new || [], true], [data.read || [], false]].forEach(([items, hydratePagers]) => {
-      Object.entries(items).forEach(async ([resourceName, rawData]: any) => {
+    for (const [items, hydratePagers] of [[data.new || [], true], [data.read || [], false]]) {
+      for (const [resourceName, rawData] of Object.entries(items)) {
         await this.describe(resourceName);
         const collection = this.getCollection(resourceName);
-        if (!collection) return;
+        if (!collection) continue;
 
         const reItems = collection.bulkInsert(rawData, Boolean(hydratePagers), options);
         const updateItems = reItems.pop();
@@ -222,10 +223,10 @@ export class ResourceManager {
         // sending events for data arrived
         this.emit('received-' + resourceName);
         // console.log('done');
-      });
-    });
+      }
+    }
 
-    if (data.m2m) {
+      if (data.m2m) {
       for (const [resourceName, attrs] of Object.entries(data.m2m)) {
         const model = await this.describe(resourceName);
         for (const [attrName, attr] of Object.entries(attrs)) {
