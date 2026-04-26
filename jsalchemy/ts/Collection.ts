@@ -212,13 +212,7 @@ class Collection {
             }
         }
         if (existingItems.length) {
-            this.bulkUpdate(
-                existingItems.map(item => [item[0],
-                    Object.fromEntries(
-                        Object.entries(
-                            utils.diffDict(...item))
-                            .filter(x => !x[0].startsWith('$'))
-                    )]));
+            this.bulkUpdate(existingItems);
         }
 
         return [newItems, existingItems]
@@ -239,11 +233,14 @@ class Collection {
             return [oldItem, oldStatus];
         })
         for (let [filterKey, sort] of this.pagers.entries()) {
+            if (filterKey === '') continue
             let toRemove: IResource[] = [];
             let toAdd: IResource = [];
+            let filterSet = new Set(Object.keys(this.filters.get(filterKey)));
             let filterFunc = this.filterFuncs.get(filterKey);
             for (let [oldItem, partial] of oItems) {
-                (filterFunc(partial) ? toRemove : toAdd).push(oldItem);
+                if (new Set(Object.keys(partial)).intersection(filterSet).size)
+                    (filterFunc(partial) ? toRemove : toAdd).push(oldItem);
             }
             if (toAdd.length) {
                 sort.totalCount += toAdd.length
