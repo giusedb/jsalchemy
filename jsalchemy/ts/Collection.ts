@@ -84,6 +84,7 @@ class Collection {
     loading: Promise<any>
     fetcher: DeferredFetcher<IResource>
     deferreQuery: DeferredQueryFetcher;
+    reactive: (item: IResource) => IResource;
 
     constructor(resMan: ResourceManager, touch: Toucher, cls: IResourceClass, loading: Promise<any>) {
         this.pkIndex = new Map()
@@ -102,6 +103,16 @@ class Collection {
             return pks.map(pk => this.pkIndex.get(pk));
         }, 50, '$pk');
         this.deferreQuery = new DeferredQueryFetcher(resMan, this);
+        if (resMan.options.uiFramework === 'vue') {
+            const ref = resMan.options.reactiveFunc;
+            this.reactive = (item: IResource) => {
+                return ref(item).value
+            }
+        } else if (resMan.options.uiFramework === 'react') {
+
+        }
+        else
+            this.reactive = (item: IResource) => item;
     }
 
     add(item: IResource) {
@@ -176,7 +187,7 @@ class Collection {
             newItems = options.savedItems;
         }
         else
-            newItems = newKeys.map(k => new this.cls(idxPk.get(k), {}));
+            newItems = newKeys.map(k => this.reactive(new this.cls(idxPk.get(k), {})));
         let existingItems: [IResource, object][] = oldKeys.map(k => {
             const oldItem = this.pkIndex.get(k);
             const newItem = idxPk.get(k);
@@ -222,7 +233,7 @@ class Collection {
                 oldItem.$init(newStatus)
                 ret.push(oldItem);
             } else {
-                oldItem = new this.cls(newStatus);
+                oldItem = this.reactive(new this.cls(newStatus));
                 this.pkIndex.set(pk, oldItem);
             }
             return [oldItem, oldStatus];

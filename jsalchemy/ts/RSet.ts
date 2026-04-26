@@ -43,8 +43,10 @@ export default class RSet {
         this.eventIds.push(this.resMan.on('deleted-' + resourceName, this.refresh.bind(this)));
         this.eventIds.push(this.resMan.on('pager-unified', this.switchPager.bind(this)));
         this.evt = new NamedEventManager()
-        this.on = this.evt.on.bind(this.evt);
         this.prevKeys = [];
+        if (resMan.options.uiFramework === 'vue') {
+            this._items = resMan.options.reactiveFunc([]).value;
+        }
     }
     dispose() {
         this.eventIds.forEach(id => this.resMan.events.unbind(id));

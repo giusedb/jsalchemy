@@ -220,12 +220,12 @@ export function makeResourceClass(orm, resMan, model, reactive) {
           Object.defineProperty(Klass.prototype, ref.attribute, {
               get() {
                   const state = reactive({});
-                  if (!(ref.local_attribute in this.$rs)) {
+                  if (!(ref.attribute in this.$rs)) {
                       const filter = {};
                       filter[ref.foreign_attribute] = this[ref.local_attribute];
-                      this.$rs[ref.local_attribute] = new RSet(resMan, ref.resource, filter);
+                      this.$rs[ref.attribute] = new RSet(resMan, ref.resource, filter);
                   }
-                  return this.$rs[ref.local_attribute];
+                  return this.$rs[ref.attribute];
               }
           });
           // Klass.prototype[_.camelCase('get ' + ref.attribute)] = async function () {

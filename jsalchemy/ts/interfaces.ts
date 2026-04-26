@@ -95,7 +95,8 @@ export interface IOrmOptions {
     endpoint: string,
     autologin: boolean,
     keepSession: number,
-    onItemCreate: Function
+    uiFramework?: 'vue' | 'svelte' | 'react' | 'angular',
+    reactiveFunc?: Function,
     ws?: {
         host: string,
         port: number,

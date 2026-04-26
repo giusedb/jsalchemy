@@ -260,7 +260,7 @@ export class ResourceManager {
     const modelName = definition.name;
     // localStorage['description:' + modelName] = JSON.stringify(definition);
     let resourceClass: IResourceClass
-    resourceClass = makeResourceClass(this.orm, this, definition, this.options.onItemCreate);
+    resourceClass = makeResourceClass(this.orm, this, definition, this.options.reactiveFunc, this.options.uiFramework);
     this.classCache[modelName] = resourceClass;
     
     if (!(modelName in this.collections)) {

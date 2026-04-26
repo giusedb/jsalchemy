@@ -42,10 +42,10 @@ const initRset = async () => {
   orm.value.on('got-data', () => {
     local.rset.refresh();
   });
-  local.rset.on('loading', (value) => {
+  local.rset.evt.on('loading', (value) => {
     state.loading = value
   });
-  local.rset.on('paging', (paging) => {
+  local.rset.evt.on('paging', (paging) => {
     if (state.page !== paging.page) {
       state.page = paging.page;
     }
