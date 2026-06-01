@@ -4,16 +4,16 @@
   "type": "module",
   "version": "0.0.1",
   "description": "JSAlchemy",
-  "main": "index.js",
+  "main": "index.ts",
   "directories": {
     "lib": "jsalchemy"
   },
   "files": [
-    "index.js",
+    "index.ts",
     "jsalchemy"
   ],
   "exports": {
-    ".": "./index.js"
+    ".": "./index.ts"
   },
   "dependencies": {
     "lodash": "^4.17.21"

@@ -167,6 +167,104 @@ export function kebabCase(str: string): string {
   let ret = str.replace(/[A-Z]([a-z]|[0-9])+/g, (x) => `-${x.toLowerCase()}`);
   return (ret.startsWith('-') ? ret.substring(1) : ret).toLowerCase();
 }
+function equal(a: any, b: any): boolean {
+  if (a === b)
+    return true;
+  if ((a === null) !== (b === null))
+    return false;
+  if ((a === undefined) !== (b === undefined))
+    return false;
+  if (a.constructor !== b.constructor)
+    return false;
+  if (a.constructor === Object)
+    return equalDict(a, b);
+  if (a.constructor === Array)
+    return arrayEqual(a, b);
+  if (a.constructor === Set)
+    return a.symmetricDifference(b).size === 0;
+  return false;
+}
+export function equalDict(source: Record<string, any>, target: Record<string, any>, keys?: Set<string>): boolean {
+  if (source === target)
+    return true;
+  let [sKeys, tKeys] = [source, target].map(Object.keys);
+  let cKeys = new Set(sKeys).intersection(new Set(tKeys));
+  let diffKeys = new Set(sKeys).symmetricDifference(new Set(tKeys));
+  if (keys) {
+    cKeys = new Set(keys).intersection(cKeys);
+    diffKeys = diffKeys.intersection(new Set(keys));
+  }
+  if (diffKeys.size)
+    return false;
+  for (let key of cKeys) {
+    let sVal = source[key], tVal = target[key];
+    if (!equal(sVal, tVal))
+      return false;
+  }
+  return true;
+}
+export function diffDict(A: Record<string, any>, B: Record<string, any>, keys?: Set<string>): Record<string, [any, any]> | null {
+  const ret: [string, any, any][] = [];
+  let [a, b] = [A, B].map(Object.keys);
+  let cKeys = new Set(a).intersection(new Set(b));
+  let aOnly = new Set(a).difference(new Set(b));
+  let bOnly = new Set(b).difference(new Set(a));
+  if (keys) {
+    cKeys = new Set(keys).intersection(cKeys);
+    aOnly = aOnly.intersection(new Set(keys));
+    bOnly = bOnly.intersection(new Set(keys));
+  }
+  for (let k of aOnly)
+    ret.push([k, A[k], null]);
+  for (let k of bOnly)
+    ret.push([k, null, B[k]]);
+  for (let k of cKeys)
+    if (!equal(A[k], B[k]))
+      ret.push([k, A[k], B[k]]);
+  if (ret.length)
+    return Object.fromEntries(ret.map(row => [row[0], [row[1], row[2]]]));
+  return null;
+}
+export function equalObject(a: Record<string, any>, b: Record<string, any>): boolean {
+  return equalDict(a, b);
+}
+export function deepMap(obj: any, func: (val: any, path?: string) => any, path?: string): any {
+  if (!obj) {
+    return obj;
+  }
+  let result: any = null;
+  if (['array', 'object'].includes(typeof obj)) {
+    let add: ((val: any, path: string) => void) | null = null;
+    let fullPath: string | null = null;
+    if (obj.constructor === Array) {
+      result = [];
+      add = function (val: any, path: string) {
+        result.push(val);
+      };
+    } else {
+      result = {};
+      add = function (val: any, path: string) {
+        result[path] = val;
+      };
+    }
+    for (let key in obj) {
+      if (path) {
+        fullPath = obj.constructor === Array ? `${path}[${key}]` : `${path}.${key}`;
+      } else {
+        fullPath = key;
+      }
+      let val = obj[key];
+      if (val && ((val.constructor === Array) || (val.constructor === Object))) {
+        add(deepMap(func(val, fullPath), func, fullPath), key);
+      } else {
+        add(func(val, fullPath), key);
+      }
+    }
+  } else {
+    return obj;
+  }
+  return result;
+}
 export function cleanDescription(): void {
     for (let key of Storage.keys()) {
         if (key.startsWith('description:')) {
@@ -180,4 +278,10 @@ export function indexMap(list: any[], indexer: Function ): Map<any, any> {
         ret.set(indexer(item), item)
     }
     return ret;
+}
+
+export default {
+    groupBy, indexBy, sleep, makeFilter, makeSortFunction, arrayEqual, range,
+    xdr, kebabCase, cleanDescription, indexMap,
+    equalDict, diffDict, equalObject, deepMap
 }

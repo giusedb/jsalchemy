@@ -1,4 +1,4 @@
-import utils from '../utils.js';
+import utils from './utils';
 import {ResourceManager} from "./ResourceManager";
 
 type IFilter = Record<string, Array<string>>

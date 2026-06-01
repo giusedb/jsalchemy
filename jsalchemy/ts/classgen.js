@@ -1,6 +1,6 @@
 import _ from 'lodash';
-import utils from '../utils.js'
-import {RSet} from "../../index.js";
+import utils from './utils.js'
+import RSet from "./RSet";
 
 /**
  * Create a cached property and invalidate it's cache by accessing an event

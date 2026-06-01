@@ -7,8 +7,8 @@ import {
     IResourceDef,
     ISort
 } from "./interfaces";
-import {Pager} from "./Pager";
-import utils from "../utils";
+import { Pager } from "./Pager";
+import utils from "./utils";
 import Toucher from "./Toucher";
 import {ResourceManager} from "./ResourceManager";
 import _ from "lodash";
