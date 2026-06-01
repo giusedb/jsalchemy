@@ -35,7 +35,7 @@ const initRset = async () => {
   if (props.recordsPerPage)
     local.rset.setRpp(props.recordsPerPage)
   state.records = local.rset.items;
-  local.rset.on('records', (recs, totalCount) => {
+  local.rset.evt.on('records', (recs, totalCount) => {
     records.value = recs;
     total.value = totalCount;
   });
