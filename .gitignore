@@ -4,3 +4,7 @@ AGENTS.md
 .DS_Store
 reconnect.sh
 .aider.*
+.gitnexus
+.claude
+wiki-client
+CLAUDE.md
