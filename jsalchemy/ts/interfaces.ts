@@ -26,10 +26,10 @@ export interface IField {
 }
 
 export interface IReference {
-    description
+    description: string
     resource: string
     type: string
-    attibute: string
+    attribute: string
     foreign_attribute: string
     local_attribute: string
 }
